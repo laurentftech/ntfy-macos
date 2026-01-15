@@ -1,0 +1,46 @@
+# ntfy-macos example configuration file
+# Copy this to ~/.config/ntfy-macos/config.yml and customize
+
+# Server URL (required)
+server: https://ntfy.sh
+
+# Authentication token (optional)
+# Alternatively, use: ntfy-macos auth --server <URL> --token <TOKEN>
+# token: tk_yourtoken
+
+# Topics to subscribe to
+topics:
+  # Example 1: Basic notification with SF Symbol
+  - name: alerts
+    icon_symbol: bell.fill
+
+  # Example 2: Notification with interactive actions
+  - name: deployments
+    icon_symbol: arrow.up.circle.fill
+    actions:
+      - title: View Logs
+        type: script
+        path: /usr/local/bin/view-logs.sh
+      - title: Check Status
+        type: script
+        path: /usr/local/bin/check-status.sh
+
+  # Example 3: Auto-run script with notification
+  - name: builds
+    icon_symbol: hammer.fill
+    auto_run_script: /usr/local/bin/build-handler.sh
+    silent: false
+
+  # Example 4: Silent background processing (no notification banner)
+  - name: monitoring
+    icon_symbol: server.rack
+    silent: true
+    auto_run_script: /usr/local/bin/monitor-handler.sh
+
+  # Example 5: Using a local image file
+  - name: custom
+    icon_path: /Users/you/Pictures/custom-icon.png
+    actions:
+      - title: Handle
+        type: script
+        path: /usr/local/bin/custom-handler.sh
