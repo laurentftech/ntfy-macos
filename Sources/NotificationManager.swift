@@ -1,0 +1,418 @@
+import Foundation
+@preconcurrency import UserNotifications
+import AppKit
+
+final class NotificationManager: NSObject, @unchecked Sendable {
+    static let shared = NotificationManager()
+
+    private var _center: UNUserNotificationCenter?
+    private let centerLock = NSLock()
+    private var center: UNUserNotificationCenter {
+        centerLock.lock()
+        defer { centerLock.unlock() }
+        if _center == nil {
+            _center = UNUserNotificationCenter.current()
+            _center?.delegate = self
+        }
+        return _center!
+    }
+
+    private let lock = NSLock()
+    private var _scriptRunner: ScriptRunner?
+
+    private override init() {
+        super.init()
+        // Clear old notification categories on startup
+        clearCategories()
+    }
+
+    /// Clears all notification categories to remove stale actions
+    func clearCategories() {
+        center.setNotificationCategories([])
+        print("Cleared notification categories")
+        fflush(stdout)
+    }
+
+    func setScriptRunner(_ runner: ScriptRunner) {
+        lock.lock()
+        defer { lock.unlock() }
+        self._scriptRunner = runner
+    }
+
+    private var scriptRunner: ScriptRunner? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _scriptRunner
+    }
+
+    /// Requests notification permissions from the user
+    func requestAuthorization(completion: @escaping @Sendable (Bool, Error?) -> Void) {
+        // Check current authorization status first
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .notDetermined {
+                // Permission not requested yet - request directly without blocking alert
+                print("📱 Requesting notification permissions...")
+                print("   A system dialog will appear - please click 'Allow'")
+
+                DispatchQueue.main.async {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+
+                    // Request authorization directly - this will show the system dialog
+                    self.center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                        if granted {
+                            print("✅ Notification permission granted!")
+                        } else {
+                            print("")
+                            print("⚠️  Notification permission was denied or the dialog didn't appear")
+                            print("")
+                            print("💡 The app is now registered in System Settings.")
+                            print("   To enable notifications manually:")
+                            print("   1. Open System Settings → Notifications")
+                            print("   2. Scroll down and find 'ntfy-macos'")
+                            print("   3. Toggle on 'Allow Notifications'")
+                            print("")
+                            print("   Then restart ntfy-macos")
+                        }
+                        completion(granted, error)
+                    }
+                }
+            } else if settings.authorizationStatus == .authorized {
+                print("✅ Notification permissions already granted")
+                completion(true, nil)
+            } else {
+                print("")
+                print("⚠️  Notification permissions are currently denied or restricted")
+                print("")
+                print("💡 To enable notifications:")
+                print("   1. Open System Settings → Notifications")
+                print("   2. Scroll down and find 'ntfy-macos' in the list")
+                print("   3. Toggle on 'Allow Notifications'")
+                print("")
+                print("   Then restart ntfy-macos")
+                completion(false, nil)
+            }
+        }
+    }
+
+    func getAuthorizationStatus(completion: @escaping @Sendable (UNAuthorizationStatus) -> Void) {
+        center.getNotificationSettings { settings in
+            completion(settings.authorizationStatus)
+        }
+    }
+
+    /// Displays a notification based on an ntfy message and topic configuration
+    func showNotification(for message: NtfyMessage, topicConfig: TopicConfig?) {
+        print("showNotification called for topic: \(message.topic)")
+        fflush(stdout)
+
+        guard let topicConfig = topicConfig else {
+            print("No topicConfig, using basic notification")
+            fflush(stdout)
+            showBasicNotification(for: message)
+            return
+        }
+
+        print("Using topicConfig for notification")
+
+        // Skip notification if silent mode is enabled
+        if topicConfig.silent == true {
+            print("Silent notification for topic \(message.topic) - skipping display")
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = message.title ?? "\(message.topic)"
+                content.body = message.message ?? "\(message.topic)"
+        // Use Glass sound to distinguish from other notification services
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
+
+        // Map ntfy priority to interruption levels
+        if let priority = message.priority {
+            switch priority {
+            case 5:
+                content.interruptionLevel = .critical
+                content.sound = .defaultCritical
+            case 4:
+                content.interruptionLevel = .timeSensitive
+            default:
+                content.interruptionLevel = .active
+            }
+        }
+
+        // Add icon attachment
+        print("Creating icon attachment for topic config: iconPath=\(topicConfig.iconPath ?? "nil"), iconSymbol=\(topicConfig.iconSymbol ?? "nil")")
+        fflush(stdout)
+        if let attachment = createIconAttachment(from: topicConfig) {
+            print("Attachment created, adding to notification")
+            fflush(stdout)
+            content.attachments = [attachment]
+        } else {
+            print("No attachment created")
+            fflush(stdout)
+        }
+
+        // Store message body and actions for handling
+        var userInfo: [String: Any] = [
+            "messageBody": message.message ?? "",
+            "topic": message.topic
+        ]
+
+        // Handle actions from message (ntfy protocol)
+        if let messageActions = message.actions, !messageActions.isEmpty {
+            let categoryId = "msg-\(message.id)-actions"
+            registerCategoryFromMessage(categoryId: categoryId, actions: messageActions)
+            content.categoryIdentifier = categoryId
+
+            // Store action URLs in userInfo for later retrieval
+            var actionUrls: [String: String] = [:]
+            for (index, action) in messageActions.enumerated() {
+                if let url = action.url {
+                    actionUrls["ntfy-action-\(index)"] = url
+                }
+            }
+            userInfo["actionUrls"] = actionUrls
+            print("Registered \(messageActions.count) actions from message")
+            fflush(stdout)
+        }
+        // Handle actions from config (fallback)
+        else if let actions = topicConfig.actions, !actions.isEmpty {
+            let categoryId = "topic-\(message.topic)-actions"
+            registerCategory(categoryId: categoryId, actions: actions)
+            content.categoryIdentifier = categoryId
+        }
+
+        content.userInfo = userInfo
+
+        // Create and schedule notification
+        let identifier = UUID().uuidString
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+
+        print("Adding notification to center...")
+        fflush(stdout)
+        center.add(request) { error in
+            if let error = error {
+                print("Failed to show notification: \(error)")
+            } else {
+                print("✅ Notification added successfully")
+            }
+            fflush(stdout)
+        }
+    }
+
+    /// Shows a basic notification without topic configuration
+    private func showBasicNotification(for message: NtfyMessage) {
+        let content = UNMutableNotificationContent()
+        content.title = message.title ?? "ntfy-macos"
+                content.body = message.message ?? ""
+        // Use Glass sound to distinguish from other notification services
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
+
+        let identifier = UUID().uuidString
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+
+        center.add(request) { error in
+            if let error = error {
+                print("Failed to show notification: \(error)")
+            }
+        }
+    }
+
+    /// Creates an icon attachment from the topic configuration
+    private func createIconAttachment(from topicConfig: TopicConfig) -> UNNotificationAttachment? {
+        // Try SF Symbol first
+        if let symbolName = topicConfig.iconSymbol {
+            if let symbolImage = createSFSymbolImage(named: symbolName) {
+                return createAttachment(from: symbolImage)
+            }
+        }
+
+        // Try local file path
+        if let iconPath = topicConfig.iconPath {
+            print("Trying icon path: \(iconPath)")
+            fflush(stdout)
+            let url = URL(fileURLWithPath: iconPath)
+            if FileManager.default.fileExists(atPath: iconPath) {
+                print("Icon file exists")
+                fflush(stdout)
+                do {
+                    let attachment = try UNNotificationAttachment(identifier: UUID().uuidString, url: url, options: nil)
+                    print("Icon attachment created successfully")
+                    fflush(stdout)
+                    return attachment
+                } catch {
+                    print("Failed to create attachment: \(error)")
+                    fflush(stdout)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Creates an NSImage from an SF Symbol
+    private func createSFSymbolImage(named symbolName: String) -> NSImage? {
+        let config = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+        return NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+    }
+
+    /// Converts an NSImage to a notification attachment
+    private func createAttachment(from image: NSImage) -> UNNotificationAttachment? {
+        guard let tiffData = image.tiffRepresentation,
+              let bitmapImage = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmapImage.representation(using: .png, properties: [:]) else {
+            return nil
+        }
+
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileName = "\(UUID().uuidString).png"
+        let fileURL = tempDir.appendingPathComponent(fileName)
+
+        do {
+            try pngData.write(to: fileURL)
+            return try UNNotificationAttachment(identifier: UUID().uuidString, url: fileURL, options: nil)
+        } catch {
+            print("Failed to create attachment: \(error)")
+            return nil
+        }
+    }
+
+    /// Registers a notification category with actions from config
+    private func registerCategory(categoryId: String, actions: [NotificationAction]) {
+        let unActions = actions.prefix(4).map { action in
+            UNNotificationAction(
+                identifier: "action-\(action.title.lowercased().replacingOccurrences(of: " ", with: "-"))",
+                title: action.title,
+                options: [.foreground]
+            )
+        }
+
+        let category = UNNotificationCategory(
+            identifier: categoryId,
+            actions: unActions,
+            intentIdentifiers: [],
+            options: []
+        )
+
+        center.getNotificationCategories { existingCategories in
+            var categories = existingCategories
+            categories.insert(category)
+            self.center.setNotificationCategories(categories)
+        }
+    }
+
+    /// Registers a notification category with actions from ntfy message
+    private func registerCategoryFromMessage(categoryId: String, actions: [NtfyMessage.NtfyAction]) {
+        let unActions = actions.prefix(4).enumerated().map { (index, action) in
+            UNNotificationAction(
+                identifier: "ntfy-action-\(index)",
+                title: action.label,
+                options: [.foreground]
+            )
+        }
+
+        let category = UNNotificationCategory(
+            identifier: categoryId,
+            actions: unActions,
+            intentIdentifiers: [],
+            options: []
+        )
+
+        center.getNotificationCategories { existingCategories in
+            var categories = existingCategories
+            categories.insert(category)
+            self.center.setNotificationCategories(categories)
+        }
+    }
+
+    /// Shows a test notification for a specific topic
+    func showTestNotification(topic: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Test Notification"
+        content.body = "This is a test notification for topic: \(topic)"
+        content.sound = .default
+
+        // The app icon on the left side of the notification is automatically
+        // taken from the app bundle's CFBundleIconFile by macOS
+
+        let identifier = UUID().uuidString
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+
+        center.add(request) { error in
+            if let error = error {
+                print("Failed to show test notification: \(error)")
+            } else {
+                print("Test notification sent successfully")
+            }
+        }
+    }
+}
+
+extension NotificationManager: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        let messageBody = userInfo["messageBody"] as? String ?? ""
+        let topic = userInfo["topic"] as? String ?? ""
+
+        if response.actionIdentifier != UNNotificationDefaultActionIdentifier,
+           response.actionIdentifier != UNNotificationDismissActionIdentifier {
+            handleActionResponse(response, messageBody: messageBody, topic: topic)
+        }
+
+        completionHandler()
+    }
+
+    private func handleActionResponse(_ response: UNNotificationResponse, messageBody: String, topic: String) {
+        let actionIdentifier = response.actionIdentifier
+        let userInfo = response.notification.request.content.userInfo
+
+        // Check for ntfy message actions (URLs)
+        if actionIdentifier.hasPrefix("ntfy-action-"),
+           let actionUrls = userInfo["actionUrls"] as? [String: String],
+           let urlString = actionUrls[actionIdentifier],
+           let url = URL(string: urlString) {
+            print("Opening URL from ntfy action: \(urlString)")
+            fflush(stdout)
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(url)
+            }
+            return
+        }
+
+        // Handle config-based actions
+        guard let topicConfig = ConfigManager.shared.topicConfig(for: topic),
+              let actions = topicConfig.actions else {
+            return
+        }
+
+        let matchingAction = actions.first { action in
+            let actionId = "action-\(action.title.lowercased().replacingOccurrences(of: " ", with: "-"))"
+            return actionId == actionIdentifier
+        }
+
+        if let action = matchingAction {
+            if action.type == "script", let path = action.path {
+                print("Executing action script: \(path)")
+                scriptRunner?.runScript(at: path, withArgument: messageBody)
+            } else if action.type == "view", let urlString = action.url, let url = URL(string: urlString) {
+                print("Opening URL from config action: \(urlString)")
+                fflush(stdout)
+                DispatchQueue.main.async {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
+    }
+}
