@@ -77,4 +77,31 @@ struct KeychainHelper {
             throw KeychainError.unexpectedStatus(status)
         }
     }
+
+    /// Lists all server URLs that have tokens stored in Keychain
+    static func listServers() throws -> [String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecItemNotFound {
+            return []
+        }
+
+        guard status == errSecSuccess else {
+            throw KeychainError.unexpectedStatus(status)
+        }
+
+        guard let items = result as? [[String: Any]] else {
+            return []
+        }
+
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
 }

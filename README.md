@@ -5,26 +5,27 @@ A native macOS CLI notifier and automation agent for [ntfy](https://ntfy.sh). Su
 ## Features
 
 - **Native macOS Notifications**: Rich notifications with SF Symbols and local images
-- **Interactive Actions**: Add custom buttons to notifications that execute scripts
+- **Multi-Server Support**: Connect to multiple ntfy servers simultaneously
+- **Emoji Tags**: Automatic conversion of ntfy tags to emojis in notification titles
+- **Interactive Actions**: Add custom buttons to notifications that execute scripts or open URLs
 - **Automatic Script Execution**: Run shell scripts automatically when messages arrive
 - **Silent Notifications**: Receive messages without displaying notification banners
 - **Secure Authentication**: Store tokens securely in macOS Keychain
 - **Robust Reconnection**: Handles network interruptions and sleep/wake gracefully
 - **Priority Mapping**: Maps ntfy priority levels to macOS interruption levels (critical, time-sensitive)
-- **Background Service**: Runs as a LaunchAgent for persistent operation
+- **Menu Bar App**: Runs in the menu bar with quick access to config and reload
 
 ## Installation
 
-### Using Homebrew (Coming Soon)
-
-Once published to Homebrew, installation will be:
+### Using Homebrew
 
 ```bash
-brew install ntfy-macos
-brew services start ntfy-macos
-```
+# Add the tap
+brew tap laurentftech/ntfy-macos
 
-For now, please build from source (see below).
+# Install
+brew install ntfy-macos
+```
 
 ### Build from Source
 
@@ -52,79 +53,83 @@ This creates a sample configuration at `~/.config/ntfy-macos/config.yml`.
 
 2. **Edit Configuration**
 
-Edit the configuration file to add your server and topics:
+Edit the configuration file to add your servers and topics:
 
 ```yaml
-server: https://ntfy.sh
+servers:
+  - url: https://ntfy.sh
+    topics:
+      - name: alerts
+        icon_symbol: bell.fill
+        actions:
+          - title: Acknowledge
+            type: script
+            path: /usr/local/bin/ack-alert.sh
 
-topics:
-  - name: alerts
-    icon_symbol: bell.fill
-    actions:
-      - title: Acknowledge
-        type: script
-        path: /usr/local/bin/ack-alert.sh
+  - url: https://your-private-server.com
+    token: tk_yourtoken
+    topics:
+      - name: deployments
+        icon_path: /Users/you/icons/deploy.png
 ```
 
-3. **(Optional) Store Authentication Token**
+3. **(Optional) Store Authentication Token in Keychain**
 
 ```bash
-ntfy-macos auth --server https://ntfy.sh --token tk_yourtoken
+ntfy-macos auth add https://ntfy.sh tk_yourtoken
 ```
 
 4. **Start the Service**
+
+Simply double-click the app or run:
 
 ```bash
 ntfy-macos serve
 ```
 
-Or use Homebrew services for automatic startup:
-
-```bash
-brew services start ntfy-macos
-```
+The app runs in the menu bar with options to edit config, reload, and quit.
 
 ## Configuration
 
 The configuration file is located at `~/.config/ntfy-macos/config.yml`:
 
 ```yaml
-# Server URL (required)
-server: https://ntfy.sh
+servers:
+  # Public ntfy.sh server
+  - url: https://ntfy.sh
+    # token: tk_optional  # Can also use Keychain
+    topics:
+      - name: alerts
+        icon_symbol: bell.fill
+        actions:
+          - title: Acknowledge
+            type: script
+            path: /usr/local/bin/ack-alert.sh
+          - title: Open Dashboard
+            type: view
+            url: "https://dashboard.example.com"
 
-# Authentication token (optional - can be stored in Keychain instead)
-token: tk_yourtoken
+      - name: deployments
+        icon_path: /Users/you/icons/deploy.png
+        auto_run_script: /usr/local/bin/deploy-handler.sh
 
-# Topics to subscribe to
-topics:
-  - name: alerts
-    # SF Symbol icon (optional)
-    icon_symbol: bell.fill
-    # Actions appear as buttons in the notification
-    actions:
-      - title: Acknowledge
-        type: script
-        path: /usr/local/bin/ack-alert.sh
-      - title: View Logs
-        type: script
-        path: /usr/local/bin/view-logs.sh
-
-  - name: deployments
-    # Local image file (optional)
-    icon_path: /Users/you/icons/deploy.png
-    # Script runs automatically when notification arrives
-    auto_run_script: /usr/local/bin/deploy-handler.sh
-    # Show notification banner
-    silent: false
-
-  - name: monitoring
-    icon_symbol: server.rack
-    # Silent mode - no notification banner, just runs the script
-    silent: true
-    auto_run_script: /usr/local/bin/monitor-handler.sh
+  # Private server
+  - url: https://your-private-server.com
+    token: tk_yourtoken
+    topics:
+      - name: monitoring
+        icon_symbol: server.rack
+        silent: true
+        auto_run_script: /usr/local/bin/monitor-handler.sh
 ```
 
 ### Configuration Options
+
+#### Server Fields
+
+- `url` (required): Server URL (e.g., `https://ntfy.sh`)
+- `token` (optional): Authentication token (can also be stored in Keychain)
+- `topics` (required): List of topics to subscribe to
 
 #### Topic Fields
 
@@ -138,8 +143,9 @@ topics:
 #### Action Fields
 
 - `title` (required): Button label
-- `type` (required): Currently only `script` is supported
-- `path` (required): Absolute path to script file
+- `type` (required): `script` or `view`
+- `path` (required for script): Absolute path to script file
+- `url` (required for view): URL to open when clicked
 
 ## CLI Commands
 
@@ -156,17 +162,24 @@ Options:
 
 ### auth
 
-Store authentication token in Keychain:
+Manage authentication tokens in Keychain:
 
 ```bash
-ntfy-macos auth --server <URL> --token <TOKEN>
+# Add a token
+ntfy-macos auth add <server-url> <token>
+
+# List all stored tokens
+ntfy-macos auth list
+
+# Remove a token
+ntfy-macos auth remove <server-url>
 ```
 
-The Keychain token takes priority over the token in the YAML configuration.
+Keychain tokens take priority over tokens in the YAML configuration.
 
 ### test-notify
 
-Send a test notification:
+Send a test notification (and request permissions):
 
 ```bash
 ntfy-macos test-notify --topic <NAME>
@@ -235,30 +248,18 @@ You can use any SF Symbol name for icons. Common examples:
 
 Browse all symbols using the SF Symbols app (free from Apple).
 
-## Background Service
+## Emoji Tags
 
-### Using Homebrew Services
+ntfy supports [emoji shortcodes](https://docs.ntfy.sh/emojis/) in the `Tags` field. When you send a message with tags like `warning` or `fire`, ntfy-macos automatically converts them to emojis and prepends them to the notification title.
 
+Example using curl:
 ```bash
-# Start service
-brew services start ntfy-macos
-
-# Stop service
-brew services stop ntfy-macos
-
-# Restart service
-brew services restart ntfy-macos
-
-# View status
-brew services info ntfy-macos
+curl -H "Tags: warning,fire" -H "Title: Alert" -d "Server is down" https://ntfy.sh/mytopic
 ```
 
-### Manual LaunchAgent Setup
+This displays as: **⚠️🔥 Alert**
 
-The service plist is automatically generated by Homebrew. Logs are written to:
-
-- stdout: `/opt/homebrew/var/log/ntfy-macos/stdout.log`
-- stderr: `/opt/homebrew/var/log/ntfy-macos/stderr.log`
+Common tags: `warning` (⚠️), `fire` (🔥), `+1` (👍), `skull` (💀), `bell` (🔔), `rocket` (🚀), `check` (✅), etc.
 
 ## Troubleshooting
 
@@ -295,41 +296,54 @@ The service plist is automatically generated by Homebrew. Logs are written to:
 
 ## Examples
 
-### Deployment Notifications
+### Multi-Server Setup
 
 ```yaml
-topics:
-  - name: deployments
-    icon_symbol: arrow.up.circle.fill
-    actions:
-      - title: View Status
-        type: script
-        path: /usr/local/bin/check-deploy.sh
-      - title: Rollback
-        type: script
-        path: /usr/local/bin/rollback.sh
+servers:
+  # Public ntfy.sh
+  - url: https://ntfy.sh
+    topics:
+      - name: public-alerts
+        icon_symbol: bell.fill
+
+  # Self-hosted server
+  - url: https://ntfy.mycompany.com
+    token: tk_secret
+    topics:
+      - name: deployments
+        icon_symbol: arrow.up.circle.fill
+        actions:
+          - title: View Status
+            type: view
+            url: "https://ci.mycompany.com"
+          - title: Rollback
+            type: script
+            path: /usr/local/bin/rollback.sh
 ```
 
-### Server Monitoring
+### Home Automation
 
 ```yaml
-topics:
-  - name: server-alerts
-    icon_symbol: exclamationmark.triangle.fill
-    auto_run_script: /usr/local/bin/alert-handler.sh
-    actions:
-      - title: SSH to Server
-        type: script
-        path: /usr/local/bin/ssh-connect.sh
+servers:
+  - url: https://ntfy.home.local
+    topics:
+      - name: homeassistant
+        icon_path: /Users/you/icons/ha.png
+        actions:
+          - title: Open Home Assistant
+            type: view
+            url: "homeassistant://"
 ```
 
 ### Silent Background Processing
 
 ```yaml
-topics:
-  - name: background-jobs
-    silent: true
-    auto_run_script: /usr/local/bin/process-job.sh
+servers:
+  - url: https://ntfy.sh
+    topics:
+      - name: background-jobs
+        silent: true
+        auto_run_script: /usr/local/bin/process-job.sh
 ```
 
 ## Architecture
