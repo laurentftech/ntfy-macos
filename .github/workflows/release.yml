@@ -48,43 +48,73 @@ jobs:
             echo "TAP_GITHUB_TOKEN not set, skipping Homebrew tap update"
             exit 0
           fi
+          
           SOURCE_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${VERSION}.tar.gz"
           wget -q -O "source.tar.gz" "${SOURCE_URL}"
           SHA256=$(shasum -a 256 "source.tar.gz" | awk '{print $1}')
+          
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git clone https://github.com/laurentftech/homebrew-ntfy-macos.git tap
           cd tap
-          cat > Formula/ntfy-macos.rb <<EOF
-          class NtfyMacos < Formula
-            desc "Native macOS CLI notifier and automation agent for ntfy"
-            homepage "https://github.com/laurentftech/ntfy-macos"
-            url "${SOURCE_URL}"
-            sha256 "${SHA256}"
-            license "MIT"
-            head "https://github.com/laurentftech/ntfy-macos.git", branch: "main"
+          
+          cat > Formula/ntfy-macos.rb << 'FORMULA'
+class NtfyMacos < Formula
+  desc "Native macOS CLI notifier and automation agent for ntfy"
+  homepage "https://github.com/laurentftech/ntfy-macos"
+  url "SOURCE_URL_PLACEHOLDER"
+  sha256 "SHA256_PLACEHOLDER"
+  license "Apache-2.0"
+  version "VERSION_PLACEHOLDER"
+  head "https://github.com/laurentftech/ntfy-macos.git", branch: "main"
 
-            depends_on xcode: ["14.0", :build]
-            depends_on :macos
+  depends_on xcode: ["15.0", :build]
+  depends_on :macos
 
-            def install
-              system "./build-app.sh"
-              prefix.install ".build/release/ntfy-macos.app"
-              bin.install_symlink prefix/"ntfy-macos.app/Contents/MacOS/ntfy-macos"
-            end
+  def install
+    # Build with sandbox disabled
+    system "swift", "build", "-c", "release", "--disable-sandbox"
+    
+    # Create app bundle structure
+    app_name = "ntfy-macos"
+    app_bundle = "#{app_name}.app"
+    build_dir = ".build/release"
+    
+    mkdir_p "#{build_dir}/#{app_bundle}/Contents/MacOS"
+    mkdir_p "#{build_dir}/#{app_bundle}/Contents/Resources"
+    
+    # Copy executable
+    cp "#{build_dir}/#{app_name}", "#{build_dir}/#{app_bundle}/Contents/MacOS/"
+    
+    # Copy resources
+    cp "Resources/Info.plist", "#{build_dir}/#{app_bundle}/Contents/"
+    cp "Resources/ntfy-macos.icns", "#{build_dir}/#{app_bundle}/Contents/Resources/"
+    
+    # Ad-hoc sign
+    system "codesign", "--force", "--deep", "--sign", "-", "#{build_dir}/#{app_bundle}"
+    
+    prefix.install "#{build_dir}/#{app_bundle}"
+    bin.install_symlink prefix/"#{app_bundle}/Contents/MacOS/#{app_name}"
+  end
 
-            service do
-              run [opt_bin/"ntfy-macos", "serve"]
-              keep_alive true
-              log_path var/"log/ntfy-macos/stdout.log"
-              error_log_path var/"log/ntfy-macos/stderr.log"
-            end
+  service do
+    run [opt_bin/"ntfy-macos", "serve"]
+    keep_alive true
+    log_path var/"log/ntfy-macos/stdout.log"
+    error_log_path var/"log/ntfy-macos/stderr.log"
+  end
 
-            test do
-              system "#{bin}/ntfy-macos", "help"
-            end
-          end
-          EOF
+  test do
+    system bin/"ntfy-macos", "help"
+  end
+end
+FORMULA
+
+          # Replace placeholders
+          sed -i '' "s|SOURCE_URL_PLACEHOLDER|${SOURCE_URL}|g" Formula/ntfy-macos.rb
+          sed -i '' "s|SHA256_PLACEHOLDER|${SHA256}|g" Formula/ntfy-macos.rb
+          sed -i '' "s|VERSION_PLACEHOLDER|${VERSION}|g" Formula/ntfy-macos.rb
+          
           git add Formula/ntfy-macos.rb
           git commit -m "Update ntfy-macos to ${VERSION}"
           git push https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/laurentftech/homebrew-ntfy-macos.git main
