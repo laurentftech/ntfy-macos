@@ -361,7 +361,7 @@ Contributions are welcome! Please open issues or pull requests on GitHub.
 
 ## License
 
-Apache License 2.0
+MIT License
 
 ## Related Projects
 

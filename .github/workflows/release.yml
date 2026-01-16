@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build release
+        run: swift build -c release
+
+      - name: Create archive
+        run: |
+          mkdir -p dist
+          cp .build/release/ntfy-macos dist/
+          cd dist
+          tar -czvf ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz ntfy-macos
+          shasum -a 256 ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz > ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz.sha256
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz
+            dist/ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew tap
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$TAP_GITHUB_TOKEN" ]; then
+            echo "TAP_GITHUB_TOKEN not set, skipping Homebrew tap update"
+            exit 0
+          fi
+
+          VERSION=${{ steps.version.outputs.VERSION }}
+          SHA256=$(cat dist/ntfy-macos-${VERSION}-darwin-universal.tar.gz.sha256 | awk '{print $1}')
+
+          # Clone tap repo
+          git clone https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/laurentftech/homebrew-ntfy-macos.git tap
+          cd tap
+
+          # Update formula
+          cat > Formula/ntfy-macos.rb << EOF
+          class NtfyMacos < Formula
+            desc "Native macOS CLI notifier and automation agent for ntfy"
+            homepage "https://github.com/laurentftech/ntfy-macos"
+            url "https://github.com/laurentftech/ntfy-macos/archive/refs/tags/${VERSION}.tar.gz"
+            sha256 "${SHA256}"
+            license "MIT"
+
+            depends_on xcode: ["14.0", :build]
+            depends_on :macos
+
+            def install
+              system "swift", "build", "-c", "release", "--disable-sandbox"
+              bin.install ".build/release/ntfy-macos"
+            end
+
+            test do
+              assert_match "ntfy-macos", shell_output("#{bin}/ntfy-macos help")
+            end
+          end
+          EOF
+
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add Formula/ntfy-macos.rb
+          git commit -m "Update ntfy-macos to ${VERSION}"
+          git push
