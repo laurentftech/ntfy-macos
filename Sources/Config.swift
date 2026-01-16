@@ -26,10 +26,19 @@ struct TopicConfig: Codable {
     }
 }
 
-struct AppConfig: Codable {
-    let server: String
+struct ServerConfig: Codable {
+    let url: String
     let token: String?
     let topics: [TopicConfig]
+}
+
+struct AppConfig: Codable {
+    let servers: [ServerConfig]
+
+    // Convenience: all topics across all servers
+    var allTopics: [TopicConfig] {
+        servers.flatMap { $0.topics }
+    }
 }
 
 enum ConfigError: Error {
@@ -98,50 +107,52 @@ final class ConfigManager: @unchecked Sendable {
 
         let sampleYAML = """
         # ntfy-macos configuration file
-        # Server URL (required)
-        server: https://ntfy.sh
+        servers:
+          - url: https://ntfy.sh
+            # token: your_token_here  # optional
+            topics:
+              - name: alerts
+                icon_symbol: bell.fill
+                actions:
+                  - title: Acknowledge
+                    type: script
+                    path: /usr/local/bin/ack-alert.sh
 
-        # Authentication token (optional, can also be stored in Keychain)
-        # token: your_token_here
+          - url: https://your-private-server.com
+            token: your_private_token
+            topics:
+              - name: deployments
+                icon_path: /Users/you/icons/deploy.png
+                auto_run_script: /usr/local/bin/deploy-handler.sh
 
-        # Topics to subscribe to
-        topics:
-          - name: alerts
-            icon_symbol: bell.fill
-            actions:
-              - title: Acknowledge
-                type: script
-                path: /usr/local/bin/ack-alert.sh
-
-          - name: deployments
-            icon_path: /Users/you/icons/deploy.png
-            auto_run_script: /usr/local/bin/deploy-handler.sh
-            silent: false
-
-          - name: monitoring
-            icon_symbol: server.rack
-            silent: true
-            auto_run_script: /usr/local/bin/monitor-handler.sh
+              - name: monitoring
+                icon_symbol: server.rack
+                silent: true
         """
 
         try sampleYAML.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    /// Retrieves the authentication token (Keychain takes priority over YAML)
-    func getAuthToken() -> String? {
+    /// Retrieves the authentication token for a specific server
+    func getAuthToken(forServer serverURL: String) -> String? {
         guard let config = config else { return nil }
 
+        // Find the server config
+        guard let serverConfig = config.servers.first(where: { $0.url == serverURL }) else {
+            return nil
+        }
+
         // Try Keychain first
-        if let keychainToken = try? KeychainHelper.getToken(forServer: config.server) {
+        if let keychainToken = try? KeychainHelper.getToken(forServer: serverURL) {
             return keychainToken
         }
 
-        // Fallback to YAML token
-        return config.token
+        // Fallback to config token
+        return serverConfig.token
     }
 
-    /// Finds a topic configuration by name
+    /// Finds a topic configuration by name (searches all servers)
     func topicConfig(for topicName: String) -> TopicConfig? {
-        return config?.topics.first { $0.name == topicName }
+        return config?.allTopics.first { $0.name == topicName }
     }
 }

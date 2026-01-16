@@ -3,7 +3,7 @@ import UserNotifications
 import AppKit
 
 final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
-    private var client: NtfyClient?
+    private var clients: [NtfyClient] = []
     private var notificationManager: NotificationManager?
     private let scriptRunner = ScriptRunner()
 
@@ -46,21 +46,28 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             exit(1)
         }
 
-        let topicNames = config.topics.map { $0.name }
-        guard !topicNames.isEmpty else {
+        let allTopics = config.allTopics.map { $0.name }
+        guard !allTopics.isEmpty else {
             print("No topics configured")
             exit(1)
         }
 
-        print("Configured topics: \(topicNames.joined(separator: ", "))")
+        print("Configured servers: \(config.servers.count)")
+        for server in config.servers {
+            let topics = server.topics.map { $0.name }.joined(separator: ", ")
+            print("  - \(server.url): \(topics)")
+        }
         fflush(stdout)
 
         // Don't call RunLoop here - it's managed by the entry point
     }
 
-    func startService(server: String, topicNames: [String]) {
-        print("Starting service for server: \(server)")
-        fflush(stdout)
+    func startService() {
+        guard let config = ConfigManager.shared.config else {
+            print("Configuration is invalid")
+            fflush(stdout)
+            return
+        }
 
         let notificationManager = ensureNotificationManager()
 
@@ -76,20 +83,27 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
                 exit(1)
             }
 
-            // This should be called after RunLoop has started
-            print("Creating NtfyClient...")
-            fflush(stdout)
+            // Create a client for each server
+            for serverConfig in config.servers {
+                let topicNames = serverConfig.topics.map { $0.name }
+                guard !topicNames.isEmpty else { continue }
 
-            let authToken = ConfigManager.shared.getAuthToken()
-            self.client = NtfyClient(
-                serverURL: server,
-                topics: topicNames,
-                authToken: authToken
-            )
-            self.client?.delegate = self
-            print("Calling connect()...")
-            fflush(stdout)
-            self.client?.connect()
+                print("Creating client for \(serverConfig.url)...")
+                fflush(stdout)
+
+                let authToken = ConfigManager.shared.getAuthToken(forServer: serverConfig.url)
+                let client = NtfyClient(
+                    serverURL: serverConfig.url,
+                    topics: topicNames,
+                    authToken: authToken
+                )
+                client.delegate = self
+                self.clients.append(client)
+
+                print("Connecting to \(serverConfig.url)...")
+                fflush(stdout)
+                client.connect()
+            }
         }
     }
 
@@ -97,9 +111,11 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         print("Reloading configuration...")
         fflush(stdout)
 
-        // Disconnect current client
-        client?.disconnect()
-        client = nil
+        // Disconnect all clients
+        for client in clients {
+            client.disconnect()
+        }
+        clients.removeAll()
 
         // Reload config file
         do {
@@ -116,12 +132,15 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             return
         }
 
-        let topicNames = config.topics.map { $0.name }
-        print("Reloaded topics: \(topicNames.joined(separator: ", "))")
+        print("Reloaded servers: \(config.servers.count)")
+        for server in config.servers {
+            let topics = server.topics.map { $0.name }.joined(separator: ", ")
+            print("  - \(server.url): \(topics)")
+        }
         fflush(stdout)
 
         // Reconnect with new config
-        startService(server: config.server, topicNames: topicNames)
+        startService()
     }
 
     func ntfyClient(_ client: NtfyClient, didReceiveMessage message: NtfyMessage) {
@@ -171,15 +190,13 @@ struct CLI {
             ntfyAppInstance = NtfyMacOS()
             ntfyAppInstance?.serve(configPath: nil)
 
-            guard let config = ConfigManager.shared.config else {
+            guard ConfigManager.shared.config != nil else {
                 print("Configuration is invalid. Run 'ntfy-macos serve' to create a sample config.")
                 return false
             }
-            let topicNames = config.topics.map { $0.name }
 
-            let server = config.server
             // Start service directly - the DispatchQueue.main.async in entry point handles timing
-            ntfyAppInstance?.startService(server: server, topicNames: topicNames)
+            ntfyAppInstance?.startService()
             print("Service started, returning true")
             fflush(stdout)
             return true // Needs RunLoop
@@ -194,16 +211,15 @@ struct CLI {
             ntfyAppInstance?.serve(configPath: configPath)
 
             // Extract config for later use
-            guard let config = ConfigManager.shared.config else {
+            guard ConfigManager.shared.config != nil else {
                 print("Configuration is invalid")
                 exit(1)
             }
-            let topicNames = config.topics.map { $0.name }
 
             // Schedule the actual service start for after RunLoop begins
             // Use Timer to ensure RunLoop is actively running
             Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { [ntfyAppInstance] _ in
-                ntfyAppInstance?.startService(server: config.server, topicNames: topicNames)
+                ntfyAppInstance?.startService()
             }
 
             return true // Needs RunLoop
@@ -232,19 +248,86 @@ struct CLI {
     }
 
     static func handleAuth(arguments: [String]) {
-        guard let server = getFlag(arguments: arguments, flag: "--server"),
-              let token = getFlag(arguments: arguments, flag: "--token") else {
-            print("Usage: ntfy-macos auth --server <URL> --token <TOKEN>")
+        // Check for subcommand: add, list, remove
+        guard arguments.count >= 3 else {
+            printAuthUsage()
             exit(1)
         }
 
-        do {
-            try KeychainHelper.saveToken(token, forServer: server)
-            print("Token saved successfully for server: \(server)")
-        } catch {
-            print("Failed to save token: \(error)")
+        let subcommand = arguments[2]
+
+        switch subcommand {
+        case "add":
+            // ntfy-macos auth add <server-url> <token>
+            guard arguments.count >= 5 else {
+                print("Usage: ntfy-macos auth add <server-url> <token>")
+                exit(1)
+            }
+            let server = arguments[3]
+            let token = arguments[4]
+
+            do {
+                try KeychainHelper.saveToken(token, forServer: server)
+                print("✅ Token saved for server: \(server)")
+            } catch {
+                print("❌ Failed to save token: \(error)")
+                exit(1)
+            }
+
+        case "list":
+            // ntfy-macos auth list
+            do {
+                let servers = try KeychainHelper.listServers()
+                if servers.isEmpty {
+                    print("No tokens stored in Keychain.")
+                } else {
+                    print("Stored tokens for servers:")
+                    for server in servers {
+                        print("  • \(server)")
+                    }
+                }
+            } catch {
+                print("❌ Failed to list servers: \(error)")
+                exit(1)
+            }
+
+        case "remove":
+            // ntfy-macos auth remove <server-url>
+            guard arguments.count >= 4 else {
+                print("Usage: ntfy-macos auth remove <server-url>")
+                exit(1)
+            }
+            let server = arguments[3]
+
+            do {
+                try KeychainHelper.deleteToken(forServer: server)
+                print("✅ Token removed for server: \(server)")
+            } catch {
+                print("❌ Failed to remove token: \(error)")
+                exit(1)
+            }
+
+        default:
+            print("Unknown auth subcommand: \(subcommand)")
+            printAuthUsage()
             exit(1)
         }
+    }
+
+    static func printAuthUsage() {
+        print("""
+        Usage: ntfy-macos auth <subcommand>
+
+        Subcommands:
+            add <server-url> <token>    Store a token in Keychain
+            list                        List all servers with stored tokens
+            remove <server-url>         Remove a token from Keychain
+
+        Examples:
+            ntfy-macos auth add https://ntfy.sh tk_mytoken
+            ntfy-macos auth list
+            ntfy-macos auth remove https://ntfy.sh
+        """)
     }
 
     @MainActor
@@ -308,9 +391,10 @@ struct CLI {
             serve                    Start the notification service
                 --config <PATH>      Optional: Custom configuration file path
 
-            auth                     Store authentication token in Keychain
-                --server <URL>       Server URL (e.g., https://ntfy.sh)
-                --token <TOKEN>      Authentication token
+            auth <subcommand>        Manage authentication tokens in Keychain
+                add <url> <token>    Store a token for a server
+                list                 List all servers with stored tokens
+                remove <url>         Remove a token for a server
 
             test-notify              Send a test notification
                 --topic <NAME>       Topic name to test
@@ -324,8 +408,14 @@ struct CLI {
             # Create configuration
             ntfy-macos init
 
-            # Store authentication token
-            ntfy-macos auth --server https://ntfy.sh --token tk_mytoken
+            # Store authentication token in Keychain
+            ntfy-macos auth add https://ntfy.sh tk_mytoken
+
+            # List stored tokens
+            ntfy-macos auth list
+
+            # Remove a token
+            ntfy-macos auth remove https://ntfy.sh
 
             # Start the service
             ntfy-macos serve
@@ -335,6 +425,10 @@ struct CLI {
 
         CONFIGURATION:
             Default config location: ~/.config/ntfy-macos/config.yml
+
+            Tokens can be stored either:
+            - In the config file (token: field under each server)
+            - In the Keychain (using 'auth add' command) - more secure
 
         For more information, visit: https://github.com/laurentftech/ntfy-macos
         """)
