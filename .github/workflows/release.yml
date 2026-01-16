@@ -49,20 +49,18 @@ jobs:
             exit 0
           fi
 
-          # 1. Calcul des infos de la source
           SOURCE_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${VERSION}.tar.gz"
           wget -q -O "source.tar.gz" "${SOURCE_URL}"
           SHA256=$(shasum -a 256 "source.tar.gz" | awk '{print $1}')
 
-          # 2. Config Git
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 3. Mise à jour du Tap
           git clone https://github.com/laurentftech/homebrew-ntfy-macos.git tap
           cd tap
 
-          cat > Formula/ntfy-macos.rb << EOF
+          # Utilisation de <<-EOF pour permettre l'indentation de la balise de fin
+          cat <<EOF > Formula/ntfy-macos.rb
 class NtfyMacos < Formula
   desc "Native macOS CLI notifier and automation agent for ntfy"
   homepage "https://github.com/laurentftech/ntfy-macos"
@@ -75,7 +73,6 @@ class NtfyMacos < Formula
   depends_on :macos
 
   def install
-    # Le build-app.sh contient déjà le 'codesign --sign -'
     system "./build-app.sh"
     prefix.install ".build/release/ntfy-macos.app"
     bin.install_symlink prefix/"ntfy-macos.app/Contents/MacOS/ntfy-macos"
@@ -96,4 +93,4 @@ EOF
 
           git add Formula/ntfy-macos.rb
           git commit -m "Update ntfy-macos to ${VERSION}"
-          git push https://x-access-token:\${TAP_GITHUB_TOKEN}@github.com/laurentftech/homebrew-ntfy-macos.git main
+          git push https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/laurentftech/homebrew-ntfy-macos.git main
