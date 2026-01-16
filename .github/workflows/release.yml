@@ -9,7 +9,7 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  release:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
@@ -21,23 +21,20 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Build release
-        run: swift build -c release
-
-      - name: Create archive
+      - name: Build and Sign app bundle
         run: |
-          mkdir -p dist
-          cp .build/release/ntfy-macos dist/
-          cd dist
-          tar -czvf ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz ntfy-macos
-          shasum -a 256 ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz > ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz.sha256
+          chmod +x build-app.sh
+          ./build-app.sh
+
+      - name: Create app archive
+        run: |
+          cd .build/release
+          tar -czf ntfy-macos-${{ steps.version.outputs.VERSION }}.tar.gz ntfy-macos.app
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            dist/ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz
-            dist/ntfy-macos-${{ steps.version.outputs.VERSION }}-darwin-universal.tar.gz.sha256
+          files: .build/release/ntfy-macos-${{ steps.version.outputs.VERSION }}.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,44 +42,58 @@ jobs:
       - name: Update Homebrew tap
         env:
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           if [ -z "$TAP_GITHUB_TOKEN" ]; then
             echo "TAP_GITHUB_TOKEN not set, skipping Homebrew tap update"
             exit 0
           fi
 
-          VERSION=${{ steps.version.outputs.VERSION }}
-          SHA256=$(cat dist/ntfy-macos-${VERSION}-darwin-universal.tar.gz.sha256 | awk '{print $1}')
+          # 1. Calcul des infos de la source
+          SOURCE_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${VERSION}.tar.gz"
+          wget -q -O "source.tar.gz" "${SOURCE_URL}"
+          SHA256=$(shasum -a 256 "source.tar.gz" | awk '{print $1}')
 
-          # Clone tap repo
-          git clone https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/laurentftech/homebrew-ntfy-macos.git tap
+          # 2. Config Git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 3. Mise à jour du Tap
+          git clone https://github.com/laurentftech/homebrew-ntfy-macos.git tap
           cd tap
 
-          # Update formula
           cat > Formula/ntfy-macos.rb << EOF
-          class NtfyMacos < Formula
-            desc "Native macOS CLI notifier and automation agent for ntfy"
-            homepage "https://github.com/laurentftech/ntfy-macos"
-            url "https://github.com/laurentftech/ntfy-macos/archive/refs/tags/${VERSION}.tar.gz"
-            sha256 "${SHA256}"
-            license "MIT"
+class NtfyMacos < Formula
+  desc "Native macOS CLI notifier and automation agent for ntfy"
+  homepage "https://github.com/laurentftech/ntfy-macos"
+  url "${SOURCE_URL}"
+  sha256 "${SHA256}"
+  license "Apache-2.0"
+  head "https://github.com/laurentftech/ntfy-macos.git", branch: "main"
 
-            depends_on xcode: ["14.0", :build]
-            depends_on :macos
+  depends_on xcode: ["14.0", :build]
+  depends_on :macos
 
-            def install
-              system "swift", "build", "-c", "release", "--disable-sandbox"
-              bin.install ".build/release/ntfy-macos"
-            end
+  def install
+    # Le build-app.sh contient déjà le 'codesign --sign -'
+    system "./build-app.sh"
+    prefix.install ".build/release/ntfy-macos.app"
+    bin.install_symlink prefix/"ntfy-macos.app/Contents/MacOS/ntfy-macos"
+  end
 
-            test do
-              assert_match "ntfy-macos", shell_output("#{bin}/ntfy-macos help")
-            end
-          end
-          EOF
+  service do
+    run [opt_bin/"ntfy-macos", "serve"]
+    keep_alive true
+    log_path var/"log/ntfy-macos/stdout.log"
+    error_log_path var/"log/ntfy-macos/stderr.log"
+  end
 
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
+  test do
+    system "#{bin}/ntfy-macos", "help"
+  end
+end
+EOF
+
           git add Formula/ntfy-macos.rb
           git commit -m "Update ntfy-macos to ${VERSION}"
-          git push
+          git push https://x-access-token:\${TAP_GITHUB_TOKEN}@github.com/laurentftech/homebrew-ntfy-macos.git main

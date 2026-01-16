@@ -5,25 +5,20 @@ import AppKit
 final class NotificationManager: NSObject, @unchecked Sendable {
     static let shared = NotificationManager()
 
-    private var _center: UNUserNotificationCenter?
-    private let centerLock = NSLock()
-    private var center: UNUserNotificationCenter {
-        centerLock.lock()
-        defer { centerLock.unlock() }
-        if _center == nil {
-            _center = UNUserNotificationCenter.current()
-            _center?.delegate = self
-        }
-        return _center!
-    }
+    private lazy var center: UNUserNotificationCenter = {
+        dispatchPrecondition(condition: .onQueue(.main))
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        return center
+    }()
 
     private let lock = NSLock()
     private var _scriptRunner: ScriptRunner?
 
     private override init() {
         super.init()
-        // Clear old notification categories on startup
-        clearCategories()
+        // Don't call clearCategories() here - it accesses UNUserNotificationCenter
+        // which requires the run loop to be active
     }
 
     /// Clears all notification categories to remove stale actions
