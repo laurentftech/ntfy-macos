@@ -59,58 +59,51 @@ jobs:
           cd tap
           
           cat > Formula/ntfy-macos.rb << 'FORMULA'
-class NtfyMacos < Formula
-  desc "Native macOS CLI notifier and automation agent for ntfy"
-  homepage "https://github.com/laurentftech/ntfy-macos"
-  url "SOURCE_URL_PLACEHOLDER"
-  sha256 "SHA256_PLACEHOLDER"
-  license "Apache-2.0"
-  version "VERSION_PLACEHOLDER"
-  head "https://github.com/laurentftech/ntfy-macos.git", branch: "main"
-
-  depends_on xcode: ["15.0", :build]
-  depends_on :macos
-
-  def install
-    # Build with sandbox disabled
-    system "swift", "build", "-c", "release", "--disable-sandbox"
-    
-    # Create app bundle structure
-    app_name = "ntfy-macos"
-    app_bundle = "#{app_name}.app"
-    build_dir = ".build/release"
-    
-    mkdir_p "#{build_dir}/#{app_bundle}/Contents/MacOS"
-    mkdir_p "#{build_dir}/#{app_bundle}/Contents/Resources"
-    
-    # Copy executable
-    cp "#{build_dir}/#{app_name}", "#{build_dir}/#{app_bundle}/Contents/MacOS/"
-    
-    # Copy resources
-    cp "Resources/Info.plist", "#{build_dir}/#{app_bundle}/Contents/"
-    cp "Resources/ntfy-macos.icns", "#{build_dir}/#{app_bundle}/Contents/Resources/"
-    
-    # Ad-hoc sign
-    system "codesign", "--force", "--deep", "--sign", "-", "#{build_dir}/#{app_bundle}"
-    
-    prefix.install "#{build_dir}/#{app_bundle}"
-    bin.install_symlink prefix/"#{app_bundle}/Contents/MacOS/#{app_name}"
-  end
-
-  service do
-    run [opt_bin/"ntfy-macos", "serve"]
-    keep_alive true
-    log_path var/"log/ntfy-macos/stdout.log"
-    error_log_path var/"log/ntfy-macos/stderr.log"
-  end
-
-  test do
-    system bin/"ntfy-macos", "help"
-  end
-end
-FORMULA
-
-          # Replace placeholders
+          class NtfyMacos < Formula
+            desc "Native macOS CLI notifier and automation agent for ntfy"
+            homepage "https://github.com/laurentftech/ntfy-macos"
+            url "SOURCE_URL_PLACEHOLDER"
+            sha256 "SHA256_PLACEHOLDER"
+            license "Apache-2.0"
+            version "VERSION_PLACEHOLDER"
+            head "https://github.com/laurentftech/ntfy-macos.git", branch: "main"
+          
+            depends_on xcode: ["15.0", :build]
+            depends_on :macos
+          
+            def install
+              system "swift", "build", "-c", "release", "--disable-sandbox"
+              
+              app_name = "ntfy-macos"
+              app_bundle = "#{app_name}.app"
+              build_dir = ".build/release"
+              
+              mkdir_p "#{build_dir}/#{app_bundle}/Contents/MacOS"
+              mkdir_p "#{build_dir}/#{app_bundle}/Contents/Resources"
+              
+              cp "#{build_dir}/#{app_name}", "#{build_dir}/#{app_bundle}/Contents/MacOS/"
+              cp "Resources/Info.plist", "#{build_dir}/#{app_bundle}/Contents/"
+              cp "Resources/ntfy-macos.icns", "#{build_dir}/#{app_bundle}/Contents/Resources/"
+              
+              system "codesign", "--force", "--deep", "--sign", "-", "#{build_dir}/#{app_bundle}"
+              
+              prefix.install "#{build_dir}/#{app_bundle}"
+              bin.install_symlink prefix/"#{app_bundle}/Contents/MacOS/#{app_name}"
+            end
+          
+            service do
+              run [opt_bin/"ntfy-macos", "serve"]
+              keep_alive true
+              log_path var/"log/ntfy-macos/stdout.log"
+              error_log_path var/"log/ntfy-macos/stderr.log"
+            end
+          
+            test do
+              system bin/"ntfy-macos", "help"
+            end
+          end
+          FORMULA
+          
           sed -i '' "s|SOURCE_URL_PLACEHOLDER|${SOURCE_URL}|g" Formula/ntfy-macos.rb
           sed -i '' "s|SHA256_PLACEHOLDER|${SHA256}|g" Formula/ntfy-macos.rb
           sed -i '' "s|VERSION_PLACEHOLDER|${VERSION}|g" Formula/ntfy-macos.rb
