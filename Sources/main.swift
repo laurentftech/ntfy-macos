@@ -63,7 +63,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     }
 
     func startService() {
-        guard let config = ConfigManager.shared.config else {
+        guard ConfigManager.shared.config != nil else {
             print("Configuration is invalid")
             fflush(stdout)
             return
@@ -72,7 +72,9 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         let notificationManager = ensureNotificationManager()
 
         // Check authorization status before starting the service
-        notificationManager.getAuthorizationStatus { status in
+        notificationManager.getAuthorizationStatus { [weak self] status in
+            guard let self = self else { return }
+
             print("Authorization status: \(status.rawValue)")
             fflush(stdout)
 
@@ -82,6 +84,9 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
                 fflush(stdout)
                 exit(1)
             }
+
+            // Re-fetch config inside closure to avoid capturing issues
+            guard let config = ConfigManager.shared.config else { return }
 
             // Create a client for each server
             for serverConfig in config.servers {
@@ -195,10 +200,12 @@ struct CLI {
                 return false
             }
 
-            // Start service directly - the DispatchQueue.main.async in entry point handles timing
-            ntfyAppInstance?.startService()
-            print("Service started, returning true")
-            fflush(stdout)
+            // Schedule the actual service start for after RunLoop begins
+            // Use Timer to ensure RunLoop is actively running
+            Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { [ntfyAppInstance] _ in
+                ntfyAppInstance?.startService()
+            }
+
             return true // Needs RunLoop
         }
 
@@ -441,6 +448,16 @@ let app = NSApplication.shared
 // Schedule CLI execution after the run loop starts to ensure AppKit is fully initialized
 // This fixes the frozen window issue where events weren't being processed
 DispatchQueue.main.async {
+    guard Bundle.main.bundleIdentifier != nil else {
+        fputs("❌ Error: ntfy-macos must be run from within its .app bundle.\n", stderr)
+        fputs("   This is required for notifications to work correctly.\n", stderr)
+        fputs("\n", stderr)
+        fputs("   If you are running from a build directory, use the executable inside the .app bundle:\n", stderr)
+        fputs("     .build/release/ntfy-macos.app/Contents/MacOS/ntfy-macos serve\n", stderr)
+        NSApp.terminate(nil)
+        return
+    }
+
     let needsRunLoop = CLI.main()
     if !needsRunLoop {
         // Commands that don't need the run loop can exit immediately

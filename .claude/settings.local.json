@@ -35,7 +35,14 @@
       "Bash(curl -s -H \"Authorization: Bearer tk_23w3wik0oeqe7xmjvp0hj8gx7hfqa\" -H \"Title: Test icône HA\" -d \"Notification avec icône Home Assistant\" https://headscale.tadpole-liberty.ts.net/test)",
       "Bash(killall:*)",
       "Bash(curl:*)",
-      "Bash(defaults delete:*)"
+      "Bash(defaults delete:*)",
+      "Bash(git push:*)",
+      "Bash(shasum:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(brew untap:*)",
+      "Bash(brew tap:*)",
+      "Bash(brew info:*)"
     ]
   }
 }

@@ -34,3 +34,4 @@ xcuserdata/
 # Configuration (for testing)
 config.yml
 test-config.yml
+homebrew/ntfy-macos.rb
