@@ -4,6 +4,8 @@ Receive push notifications on your Mac from any source — servers, IoT devices,
 
 **ntfy-macos** is a native macOS client that subscribes to ntfy topics and delivers rich notifications with SF Symbols, images, and interactive buttons. Trigger shell scripts automatically when messages arrive.
 
+![ntfy-macos notification example](docs/ntfy-macos-snapshot.png)
+
 ## Features
 
 - **Native macOS Notifications**: Rich notifications with SF Symbols and local images
