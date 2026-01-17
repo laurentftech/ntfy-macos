@@ -1,0 +1,168 @@
+# ntfy-macos Configuration Examples
+# Copy relevant sections to ~/.config/ntfy-macos/config.yml
+
+servers:
+  # ===========================================
+  # Home Automation (Home Assistant)
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: homeassistant-alerts
+        icon_path: /Users/you/icons/homeassistant.png
+        actions:
+          - title: "Open Home Assistant"
+            type: view
+            url: "homeassistant://"
+          - title: "View Cameras"
+            type: view
+            url: "homeassistant://navigate/lovelace/cameras"
+
+  # ===========================================
+  # CI/CD Pipeline Notifications
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: github-actions
+        icon_symbol: hammer.fill
+        actions:
+          - title: "Open GitHub"
+            type: view
+            url: "https://github.com/youruser/yourrepo/actions"
+          - title: "Deploy"
+            type: script
+            path: /usr/local/bin/deploy.sh
+
+      - name: gitlab-ci
+        icon_symbol: arrow.triangle.branch
+        actions:
+          - title: "Open Pipeline"
+            type: view
+            url: "https://gitlab.com/yourgroup/yourproject/-/pipelines"
+
+  # ===========================================
+  # Server Monitoring
+  # ===========================================
+  - url: https://ntfy.myserver.com
+    token: tk_yourtoken
+    topics:
+      - name: server-alerts
+        icon_symbol: server.rack
+        actions:
+          - title: "SSH to Server"
+            type: script
+            path: /usr/local/bin/open-ssh.sh
+          - title: "View Grafana"
+            type: view
+            url: "https://grafana.myserver.com"
+
+      - name: disk-alerts
+        icon_symbol: externaldrive.fill
+        auto_run_script: /usr/local/bin/disk-cleanup.sh
+        actions:
+          - title: "View Dashboard"
+            type: view
+            url: "https://grafana.myserver.com/d/disk"
+
+  # ===========================================
+  # NAS / Synology
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: synology
+        icon_path: /Users/you/icons/synology.png
+        actions:
+          - title: "Open DSM"
+            type: view
+            url: "https://nas.local:5001"
+          - title: "Download Station"
+            type: view
+            url: "https://nas.local:5001/webman/index.cgi?launchApp=SYNO.SDS.DownloadStation.Application"
+
+  # ===========================================
+  # Package Updates (yt-dlp, Homebrew, etc.)
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: yt-dlp-releases
+        icon_symbol: arrow.down.circle.fill
+        auto_run_script: /usr/local/bin/update-yt-dlp.sh
+
+      - name: homebrew-updates
+        icon_symbol: mug.fill
+        auto_run_script: /usr/local/bin/brew-upgrade.sh
+        actions:
+          - title: "View Changelog"
+            type: view
+            url: "https://github.com/Homebrew/brew/releases"
+
+  # ===========================================
+  # Security Alerts
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: security-alerts
+        icon_symbol: lock.shield.fill
+        actions:
+          - title: "View Logs"
+            type: script
+            path: /usr/local/bin/view-security-logs.sh
+          - title: "Block IP"
+            type: script
+            path: /usr/local/bin/block-ip.sh
+
+  # ===========================================
+  # Background Processing (Silent)
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: backup-trigger
+        silent: true
+        auto_run_script: /usr/local/bin/run-backup.sh
+
+      - name: sync-trigger
+        silent: true
+        auto_run_script: /usr/local/bin/sync-files.sh
+
+  # ===========================================
+  # Smart Home Devices
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: doorbell
+        icon_symbol: video.doorbell.fill
+        actions:
+          - title: "View Camera"
+            type: view
+            url: "https://cameras.home.local/doorbell"
+          - title: "Unlock Door"
+            type: script
+            path: /usr/local/bin/unlock-door.sh
+
+      - name: garage
+        icon_symbol: car.fill
+        actions:
+          - title: "Open Garage"
+            type: script
+            path: /usr/local/bin/garage-toggle.sh
+
+  # ===========================================
+  # Development Tools
+  # ===========================================
+  - url: https://ntfy.sh
+    topics:
+      - name: build-complete
+        icon_symbol: checkmark.circle.fill
+        actions:
+          - title: "Open Xcode"
+            type: view
+            url: "xcode://"
+          - title: "Run Tests"
+            type: script
+            path: /usr/local/bin/run-tests.sh
+
+      - name: pr-review
+        icon_symbol: arrow.triangle.pull
+        actions:
+          - title: "Open PR"
+            type: view
+            url: "https://github.com/pulls"
