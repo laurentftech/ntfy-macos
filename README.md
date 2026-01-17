@@ -18,7 +18,9 @@ Receive push notifications on your Mac from any source — servers, IoT devices,
 - **Robust Reconnection**: Handles network interruptions and sleep/wake gracefully
 - **Priority Mapping**: Maps ntfy priority levels to macOS interruption levels (critical, time-sensitive)
 - **Menu Bar App**: Runs in the menu bar with quick access to config and reload
+- **Start at Login**: Optional auto-start when you log in (via menu bar toggle)
 - **Live Config Reload**: Configuration changes are detected and applied automatically
+- **Automatic Permission Request**: Prompts for notification permission on first launch
 
 ## Installation
 
@@ -55,6 +57,8 @@ brew update && brew upgrade ntfy-macos
 # Restart the service to apply the update
 brew services restart ntfy-macos
 ```
+
+**Note**: Homebrew installation requires Xcode (not just Command Line Tools) because the app is built from source.
 
 ## Quick Start
 
@@ -96,13 +100,28 @@ ntfy-macos auth add https://ntfy.sh tk_yourtoken
 
 4. **Start the Service**
 
-Simply double-click the app or run:
-
 ```bash
+# Using Homebrew services (recommended - auto-restarts on crash)
+brew services start ntfy-macos
+
+# Or run directly
 ntfy-macos serve
 ```
 
-The app runs in the menu bar with options to edit config, reload, and quit.
+On first launch, the app will automatically request notification permission.
+
+The app runs in the menu bar with options to:
+- **Start at Login**: Toggle auto-start when you log in
+- **Edit Config**: Open config file in your default editor
+- **Show Config in Finder**: Reveal config directory
+- **Reload Config**: Apply configuration changes
+- **Quit**: Stop the service
+
+5. **(Optional) Add to Launchpad**
+
+```bash
+sudo ln -sf /usr/local/opt/ntfy-macos/ntfy-macos.app /Applications/
+```
 
 ## Configuration
 
