@@ -1,6 +1,8 @@
 # ntfy-macos
 
-A native macOS CLI notifier and automation agent for [ntfy](https://ntfy.sh). Subscribe to ntfy topics and receive rich native notifications with SF Symbols, images, and interactive actions. Automatically execute shell scripts when notifications arrive.
+Receive push notifications on your Mac from any source — servers, IoT devices, home automation, CI pipelines, or custom scripts. No account required, works with the public [ntfy.sh](https://ntfy.sh) service or your own self-hosted server.
+
+**ntfy-macos** is a native macOS client that subscribes to ntfy topics and delivers rich notifications with SF Symbols, images, and interactive buttons. Trigger shell scripts automatically when messages arrive.
 
 ## Features
 
@@ -14,6 +16,7 @@ A native macOS CLI notifier and automation agent for [ntfy](https://ntfy.sh). Su
 - **Robust Reconnection**: Handles network interruptions and sleep/wake gracefully
 - **Priority Mapping**: Maps ntfy priority levels to macOS interruption levels (critical, time-sensitive)
 - **Menu Bar App**: Runs in the menu bar with quick access to config and reload
+- **Live Config Reload**: Configuration changes are detected and applied automatically
 
 ## Installation
 
@@ -227,6 +230,17 @@ This ensures Homebrew-installed tools are available.
 chmod +x /path/to/your/script.sh
 ```
 
+### Security Considerations
+
+Scripts are **only executed if explicitly configured** in your local `config.yml` file. ntfy-macos will never execute arbitrary code from incoming messages.
+
+**Best practices:**
+- Only configure scripts that you trust and have reviewed
+- Use absolute paths to scripts (e.g., `/usr/local/bin/myscript.sh`)
+- For public topics, avoid `auto_run_script` — use interactive action buttons instead, so you can review notifications before triggering scripts
+- Keep your configuration file secure (`chmod 600 ~/.config/ntfy-macos/config.yml`)
+- For sensitive automation, use a self-hosted ntfy server with authentication
+
 ## Priority Mapping
 
 ntfy priority levels map to macOS interruption levels:
@@ -363,9 +377,13 @@ Contributions are welcome! Please open issues or pull requests on GitHub.
 
 MIT License
 
+## Credits
+
+This project is a third-party client for [ntfy](https://ntfy.sh), created by [Philipp C. Heckel](https://github.com/binwiederhier). ntfy is a simple, open-source pub-sub notification service that makes it easy to send push notifications to your devices.
+
 ## Related Projects
 
-- [ntfy](https://ntfy.sh) - Simple pub-sub notification service
+- [ntfy](https://ntfy.sh) - Simple pub-sub notification service by Philipp C. Heckel
 - [ntfy-android](https://github.com/binwiederhier/ntfy-android) - Official Android app
 - [ntfy-ios](https://github.com/binwiederhier/ntfy-ios) - Official iOS app
 
