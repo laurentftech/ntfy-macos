@@ -182,8 +182,16 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             "messageId": message.id
         ]
 
-        // Handle actions from message (ntfy protocol)
-        if let messageActions = message.actions, !messageActions.isEmpty {
+        // Handle actions: config actions override message actions
+        if let actions = topicConfig.actions, !actions.isEmpty {
+            // Config actions take priority - use them instead of message actions
+            let categoryId = "topic-\(message.topic)-actions"
+            registerCategory(categoryId: categoryId, actions: actions)
+            content.categoryIdentifier = categoryId
+            print("Using \(actions.count) actions from config (overriding message actions)")
+            fflush(stdout)
+        } else if let messageActions = message.actions, !messageActions.isEmpty {
+            // No config actions - use message actions
             let categoryId = "msg-\(message.id)-actions"
             registerCategoryFromMessage(categoryId: categoryId, actions: messageActions)
             content.categoryIdentifier = categoryId
@@ -198,12 +206,6 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             userInfo["actionUrls"] = actionUrls
             print("Registered \(messageActions.count) actions from message")
             fflush(stdout)
-        }
-        // Handle actions from config (fallback)
-        else if let actions = topicConfig.actions, !actions.isEmpty {
-            let categoryId = "topic-\(message.topic)-actions"
-            registerCategory(categoryId: categoryId, actions: actions)
-            content.categoryIdentifier = categoryId
         }
 
         content.userInfo = userInfo
