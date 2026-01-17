@@ -10,6 +10,21 @@ class PermissionHelper {
     private static var label: NSTextField?
 
     static func requestPermissionsWithWindow(completion: @escaping @Sendable (Bool) -> Void) {
+        // First check if already authorized - if so, skip the window entirely
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            let status = settings.authorizationStatus
+            DispatchQueue.main.async {
+                if status == .authorized {
+                    completion(true)
+                    return
+                }
+                // Not authorized yet, show the window
+                self.showPermissionWindow(completion: completion)
+            }
+        }
+    }
+
+    private static func showPermissionWindow(completion: @escaping @Sendable (Bool) -> Void) {
         self.completion = completion
 
         // Create the window
@@ -57,19 +72,14 @@ class PermissionHelper {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             let status = settings.authorizationStatus
             DispatchQueue.main.async {
-                print("Current authorization status: \(status.rawValue)")
-
                 switch status {
                 case .notDetermined:
                     self.label?.stringValue = "ntfy-macos needs permission to send notifications.\n\nClick the button below to request permission."
                     button.isEnabled = true
 
                 case .authorized:
-                    self.label?.stringValue = "✅ Notifications are already enabled!\n\nThis window will close automatically."
-                    button.isHidden = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        self.finish(granted: true)
-                    }
+                    // This shouldn't happen since we check before showing the window
+                    self.finish(granted: true)
 
                 case .denied:
                     self.label?.stringValue = "⚠️ Notifications are denied.\n\nPlease enable in System Settings → Notifications → ntfy-macos"
@@ -126,14 +136,12 @@ class PermissionHelper {
     }
 
     static func finish(granted: Bool) {
+        let callback = completion
+        completion = nil
         window?.close()
         window = nil
         label = nil
-        completion?(granted)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            NSApp.terminate(nil)
-        }
+        callback?(granted)
     }
 }
 
