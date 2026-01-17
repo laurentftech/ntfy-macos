@@ -91,17 +91,6 @@ jobs:
               bin.install_symlink prefix/"#{app_bundle}/Contents/MacOS/#{app_name}"
             end
           
-            def post_install
-              # Create ~/Applications symlink for easy access from Finder/Launchpad
-              user_home = ENV["HOME"] || File.expand_path("~")
-              user_apps = "#{user_home}/Applications"
-              FileUtils.mkdir_p(user_apps) unless File.directory?(user_apps)
-              app_link = "#{user_apps}/ntfy-macos.app"
-              FileUtils.rm_f(app_link) if File.symlink?(app_link) || File.exist?(app_link)
-              FileUtils.ln_sf("#{opt_prefix}/ntfy-macos.app", app_link)
-              ohai "Created symlink in ~/Applications for easy access"
-            end
-
             service do
               run [opt_prefix/"ntfy-macos.app/Contents/MacOS/ntfy-macos", "serve"]
               keep_alive crashed: true
@@ -111,8 +100,8 @@ jobs:
 
             def caveats
               <<~EOS
-                ntfy-macos.app has been symlinked to ~/Applications.
-                You can now find it in Finder or Launchpad.
+                To add ntfy-macos to Launchpad:
+                  sudo ln -sf #{opt_prefix}/ntfy-macos.app /Applications/
 
                 To enable Start at Login, launch the app and check the option in the menu bar.
               EOS
