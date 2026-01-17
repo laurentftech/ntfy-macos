@@ -64,7 +64,7 @@ jobs:
             homepage "https://github.com/laurentftech/ntfy-macos"
             url "SOURCE_URL_PLACEHOLDER"
             sha256 "SHA256_PLACEHOLDER"
-            license "Apache-2.0"
+            license "MIT"
             version "VERSION_PLACEHOLDER"
             head "https://github.com/laurentftech/ntfy-macos.git", branch: "main"
           
