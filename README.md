@@ -180,6 +180,8 @@ servers:
 - `path` (required for script): Absolute path to script file
 - `url` (required for view): URL to open when clicked
 
+**Note**: Config-defined actions override any [actions](https://docs.ntfy.sh/publish/#action-buttons) sent with the ntfy message. This lets you define your own local scripts/URLs that always appear, regardless of what the message sender specified. Message actions are only used when no config actions are defined for the topic.
+
 ## CLI Commands
 
 ### serve
