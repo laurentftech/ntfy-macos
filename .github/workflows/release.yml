@@ -92,7 +92,7 @@ jobs:
             end
           
             service do
-              run [opt_bin/"ntfy-macos", "serve"]
+              run [opt_prefix/"ntfy-macos.app/Contents/MacOS/ntfy-macos", "serve"]
               keep_alive true
               log_path var/"log/ntfy-macos/stdout.log"
               error_log_path var/"log/ntfy-macos/stderr.log"
