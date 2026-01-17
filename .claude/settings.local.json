@@ -42,7 +42,11 @@
       "Bash(git commit:*)",
       "Bash(brew untap:*)",
       "Bash(brew tap:*)",
-      "Bash(brew info:*)"
+      "Bash(brew info:*)",
+      "Bash(brew services:*)",
+      "Bash(launchctl bootout:*)",
+      "Bash(brew reinstall:*)",
+      "Bash(sips:*)"
     ]
   }
 }
