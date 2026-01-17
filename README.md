@@ -18,8 +18,8 @@ Receive push notifications on your Mac from any source — servers, IoT devices,
 - **Robust Reconnection**: Handles network interruptions and sleep/wake gracefully
 - **Priority Mapping**: Maps ntfy priority levels to macOS interruption levels (critical, time-sensitive)
 - **Menu Bar App**: Runs in the menu bar with quick access to config and reload
-- **Start at Login**: Optional auto-start when you log in (via menu bar toggle)
 - **Live Config Reload**: Configuration changes are detected and applied automatically
+- **Click to Open**: Click notifications to open in browser (configurable per topic)
 - **Automatic Permission Request**: Prompts for notification permission on first launch
 
 ## Installation
@@ -111,7 +111,6 @@ ntfy-macos serve
 On first launch, the app will automatically request notification permission.
 
 The app runs in the menu bar with options to:
-- **Start at Login**: Toggle auto-start when you log in
 - **Edit Config**: Open config file in your default editor
 - **Show Config in Finder**: Reveal config directory
 - **Reload Config**: Apply configuration changes
