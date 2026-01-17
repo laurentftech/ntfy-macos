@@ -93,37 +93,53 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             print("Authorization status: \(status.rawValue)")
             fflush(stdout)
 
-            guard status == .authorized else {
-                print("❌ Notification permission not granted")
-                print("   Please run 'ntfy-macos test-notify' to grant permissions.")
+            if status == .authorized {
+                self.connectClients()
+            } else {
+                // Request permission automatically on first launch
+                print("Requesting notification permission...")
                 fflush(stdout)
-                exit(1)
+                Task { @MainActor in
+                    PermissionHelper.requestPermissionsWithWindow { granted in
+                        if granted {
+                            print("✅ Permission granted!")
+                            fflush(stdout)
+                            self.connectClients()
+                        } else {
+                            print("❌ Notification permission not granted")
+                            print("   Please enable notifications in System Settings → Notifications → ntfy-macos")
+                            fflush(stdout)
+                            exit(1)
+                        }
+                    }
+                }
             }
+        }
+    }
 
-            // Re-fetch config inside closure to avoid capturing issues
-            guard let config = ConfigManager.shared.config else { return }
+    private func connectClients() {
+        guard let config = ConfigManager.shared.config else { return }
 
-            // Create a client for each server
-            for serverConfig in config.servers {
-                let topicNames = serverConfig.topics.map { $0.name }
-                guard !topicNames.isEmpty else { continue }
+        // Create a client for each server
+        for serverConfig in config.servers {
+            let topicNames = serverConfig.topics.map { $0.name }
+            guard !topicNames.isEmpty else { continue }
 
-                print("Creating client for \(serverConfig.url)...")
-                fflush(stdout)
+            print("Creating client for \(serverConfig.url)...")
+            fflush(stdout)
 
-                let authToken = ConfigManager.shared.getAuthToken(forServer: serverConfig.url)
-                let client = NtfyClient(
-                    serverURL: serverConfig.url,
-                    topics: topicNames,
-                    authToken: authToken
-                )
-                client.delegate = self
-                self.clients.append(client)
+            let authToken = ConfigManager.shared.getAuthToken(forServer: serverConfig.url)
+            let client = NtfyClient(
+                serverURL: serverConfig.url,
+                topics: topicNames,
+                authToken: authToken
+            )
+            client.delegate = self
+            self.clients.append(client)
 
-                print("Connecting to \(serverConfig.url)...")
-                fflush(stdout)
-                client.connect()
-            }
+            print("Connecting to \(serverConfig.url)...")
+            fflush(stdout)
+            client.connect()
         }
     }
 
