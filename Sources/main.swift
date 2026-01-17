@@ -362,20 +362,22 @@ struct CLI {
         print("🚀 Requesting notification permissions with GUI window...")
 
         PermissionHelper.requestPermissionsWithWindow { granted in
-            if granted {
-                let notificationManager = NotificationManager.shared
-                notificationManager.showTestNotification(topic: topic)
-                print("✅ Test notification sent for topic: \(topic)")
-                // Give time for notification to be delivered, then exit cleanly
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            Task { @MainActor in
+                if granted {
+                    let notificationManager = NotificationManager.shared
+                    notificationManager.showTestNotification(topic: topic)
+                    print("✅ Test notification sent for topic: \(topic)")
+                    // Give time for notification to be delivered, then exit cleanly
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                        NSApp.terminate(nil)
+                    }
+                } else {
+                    print("❌ Notification permission denied")
+                    print("")
+                    print("💡 The app should now appear in System Settings → Notifications")
+                    print("   Please enable notifications there and try again.")
                     NSApp.terminate(nil)
                 }
-            } else {
-                print("❌ Notification permission denied")
-                print("")
-                print("💡 The app should now appear in System Settings → Notifications")
-                print("   Please enable notifications there and try again.")
-                NSApp.terminate(nil)
             }
         }
 
