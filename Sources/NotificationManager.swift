@@ -148,9 +148,38 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         }
 
         // Store message body and actions for handling
+        // Find server config for this topic to enable click-to-open-web
+        let serverConfig = ConfigManager.shared.config?.servers.first { server in
+            server.topics.contains { $0.name == message.topic }
+        }
+
+        // Determine click URL based on topic config, fallback to server config
+        let clickUrl: String
+        switch topicConfig.clickUrl {
+        case .disabled:
+            clickUrl = ""  // Empty string means disabled
+        case .custom(let customUrl):
+            clickUrl = customUrl
+        case .enabled, .none:
+            // Default: use server's webUrl if defined, otherwise server url + topic
+            clickUrl = serverConfig?.webUrl ?? serverConfig?.url ?? ""
+        }
+
+        // Track if this is a custom URL (don't append topic) or server URL (append topic)
+        let isCustomClickUrl: Bool
+        switch topicConfig.clickUrl {
+        case .custom:
+            isCustomClickUrl = true
+        default:
+            isCustomClickUrl = false
+        }
+
         var userInfo: [String: Any] = [
             "messageBody": message.message ?? "",
-            "topic": message.topic
+            "topic": message.topic,
+            "serverUrl": clickUrl,
+            "isCustomClickUrl": isCustomClickUrl,
+            "messageId": message.id
         ]
 
         // Handle actions from message (ntfy protocol)
@@ -363,12 +392,33 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let messageBody = userInfo["messageBody"] as? String ?? ""
         let topic = userInfo["topic"] as? String ?? ""
 
-        if response.actionIdentifier != UNNotificationDefaultActionIdentifier,
-           response.actionIdentifier != UNNotificationDismissActionIdentifier {
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+            // User clicked on the notification itself - open web view
+            openNotificationInWeb(userInfo: userInfo)
+        } else if response.actionIdentifier != UNNotificationDismissActionIdentifier {
             handleActionResponse(response, messageBody: messageBody, topic: topic)
         }
 
         completionHandler()
+    }
+
+    private func openNotificationInWeb(userInfo: [AnyHashable: Any]) {
+        guard let serverUrl = userInfo["serverUrl"] as? String, !serverUrl.isEmpty,
+              let topic = userInfo["topic"] as? String else {
+            return
+        }
+
+        let isCustomClickUrl = userInfo["isCustomClickUrl"] as? Bool ?? false
+
+        // If custom URL, use it directly; otherwise append topic to server URL
+        let webUrlString = isCustomClickUrl ? serverUrl : "\(serverUrl)/\(topic)"
+        if let url = URL(string: webUrlString) {
+            print("Opening notification in web: \(webUrlString)")
+            fflush(stdout)
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     private func handleActionResponse(_ response: UNNotificationResponse, messageBody: String, topic: String) {

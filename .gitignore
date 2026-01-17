@@ -19,6 +19,7 @@ xcuserdata/
 *~
 .vscode/
 .idea/
+.claude/
 
 # Build artifacts
 *.o
@@ -35,3 +36,7 @@ xcuserdata/
 config.yml
 test-config.yml
 homebrew/ntfy-macos.rb
+
+# Other
+BUILD_SUMMARY.md
+PROJECT_OVERVIEW.md
