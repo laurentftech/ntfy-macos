@@ -1,9 +1,11 @@
 import AppKit
+import ServiceManagement
 
 @MainActor
 class StatusBarController: NSObject {
     private var statusItem: NSStatusItem?
     private var menu: NSMenu?
+    private var startAtLoginItem: NSMenuItem?
     var onReloadConfig: (() -> Void)?
 
     static let shared = StatusBarController()
@@ -37,6 +39,16 @@ class StatusBarController: NSObject {
 
         menu?.addItem(NSMenuItem.separator())
 
+        // Start at Login toggle
+        let loginItem = NSMenuItem(title: "Start at Login", action: #selector(toggleStartAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.isEnabled = true
+        loginItem.state = isStartAtLoginEnabled() ? .on : .off
+        startAtLoginItem = loginItem
+        menu?.addItem(loginItem)
+
+        menu?.addItem(NSMenuItem.separator())
+
         let editConfigItem = NSMenuItem(title: "Edit Config...", action: #selector(editConfig), keyEquivalent: ",")
         editConfigItem.target = self
         editConfigItem.isEnabled = true
@@ -59,6 +71,29 @@ class StatusBarController: NSObject {
         menu?.addItem(quitItem)
 
         statusItem?.menu = menu
+    }
+
+    private func isStartAtLoginEnabled() -> Bool {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        }
+        return false
+    }
+
+    @objc func toggleStartAtLogin() {
+        if #available(macOS 13.0, *) {
+            do {
+                if SMAppService.mainApp.status == .enabled {
+                    try SMAppService.mainApp.unregister()
+                    startAtLoginItem?.state = .off
+                } else {
+                    try SMAppService.mainApp.register()
+                    startAtLoginItem?.state = .on
+                }
+            } catch {
+                print("Failed to toggle login item: \(error)")
+            }
+        }
     }
 
     @objc func editConfig() {
