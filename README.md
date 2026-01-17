@@ -44,6 +44,16 @@ swift build -c release
 sudo cp .build/release/ntfy-macos /usr/local/bin/
 ```
 
+### Updating
+
+```bash
+# Update via Homebrew
+brew update && brew upgrade ntfy-macos
+
+# Restart the service to apply the update
+brew services restart ntfy-macos
+```
+
 ## Quick Start
 
 1. **Initialize Configuration**
