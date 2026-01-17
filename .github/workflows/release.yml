@@ -102,8 +102,6 @@ jobs:
               <<~EOS
                 To add ntfy-macos to Launchpad:
                   sudo ln -sf #{opt_prefix}/ntfy-macos.app /Applications/
-
-                To enable Start at Login, launch the app and check the option in the menu bar.
               EOS
             end
 
