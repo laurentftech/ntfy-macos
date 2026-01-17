@@ -6,6 +6,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     private var clients: [NtfyClient] = []
     private var notificationManager: NotificationManager?
     private let scriptRunner = ScriptRunner()
+    private var configWatcher: ConfigWatcher?
 
     init() {
         // Don't initialize notificationManager here - wait until it's needed
@@ -59,7 +60,11 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         }
         fflush(stdout)
 
-        // Don't call RunLoop here - it's managed by the entry point
+        // Start watching config file for changes
+        configWatcher = ConfigWatcher(configPath: configPath)
+        configWatcher?.startWatching { [weak self] in
+            self?.reloadConfig()
+        }
     }
 
     func startService() {
