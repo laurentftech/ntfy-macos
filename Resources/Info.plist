@@ -30,5 +30,9 @@
     <true/>
     <key>NSSupportsSuddenTermination</key>
     <true/>
+    <key>NSApplicationAutomaticTerminateOnLogout</key>
+    <true/>
+    <key>NSQuitAlwaysKeepsWindows</key>
+    <false/>
 </dict>
 </plist>

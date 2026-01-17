@@ -93,7 +93,7 @@ jobs:
           
             service do
               run [opt_prefix/"ntfy-macos.app/Contents/MacOS/ntfy-macos", "serve"]
-              keep_alive true
+              keep_alive crashed: true
               log_path var/"log/ntfy-macos/stdout.log"
               error_log_path var/"log/ntfy-macos/stderr.log"
             end

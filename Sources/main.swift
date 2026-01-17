@@ -366,15 +366,16 @@ struct CLI {
                 let notificationManager = NotificationManager.shared
                 notificationManager.showTestNotification(topic: topic)
                 print("✅ Test notification sent for topic: \(topic)")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    exit(0)
+                // Give time for notification to be delivered, then exit cleanly
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    NSApp.terminate(nil)
                 }
             } else {
                 print("❌ Notification permission denied")
                 print("")
                 print("💡 The app should now appear in System Settings → Notifications")
                 print("   Please enable notifications there and try again.")
-                exit(1)
+                NSApp.terminate(nil)
             }
         }
 
@@ -457,8 +458,21 @@ struct CLI {
     }
 }
 
+// App delegate to disable state restoration (prevents crashes from corrupted saved state)
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldRestoreSecureUntitleableWindows(_ sender: NSApplication) -> Bool {
+        return false
+    }
+
+    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+        return false
+    }
+}
+
 // Entry point - Initialize NSApplication for proper macOS app behavior
 let app = NSApplication.shared
+let appDelegate = AppDelegate()
+app.delegate = appDelegate
 
 // Schedule CLI execution after the run loop starts to ensure AppKit is fully initialized
 // This fixes the frozen window issue where events weren't being processed
