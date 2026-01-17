@@ -469,6 +469,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         return false
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Unregister from launchctl to allow clean restart via brew services
+        // This silently fails if not launched via brew services, which is fine
+        let uid = getuid()
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = ["bootout", "gui/\(uid)/homebrew.mxcl.ntfy-macos"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try? task.run()
+        task.waitUntilExit()
+    }
 }
 
 // Entry point - Initialize NSApplication for proper macOS app behavior
