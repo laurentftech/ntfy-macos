@@ -2,6 +2,16 @@ import Foundation
 import UserNotifications
 import AppKit
 
+/// App constants - used when running via symlink where Bundle.main.bundleIdentifier is nil
+enum AppConstants {
+    static let bundleIdentifier = "com.laurentftech.ntfy-macos"
+
+    /// Returns the bundle identifier, falling back to hardcoded value if running via symlink
+    static var effectiveBundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? bundleIdentifier
+    }
+}
+
 final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     private var clients: [NtfyClient] = []
     private var notificationManager: NotificationManager?
@@ -453,16 +463,6 @@ let app = NSApplication.shared
 // Schedule CLI execution after the run loop starts to ensure AppKit is fully initialized
 // This fixes the frozen window issue where events weren't being processed
 DispatchQueue.main.async {
-    guard Bundle.main.bundleIdentifier != nil else {
-        fputs("❌ Error: ntfy-macos must be run from within its .app bundle.\n", stderr)
-        fputs("   This is required for notifications to work correctly.\n", stderr)
-        fputs("\n", stderr)
-        fputs("   If you are running from a build directory, use the executable inside the .app bundle:\n", stderr)
-        fputs("     .build/release/ntfy-macos.app/Contents/MacOS/ntfy-macos serve\n", stderr)
-        NSApp.terminate(nil)
-        return
-    }
-
     let needsRunLoop = CLI.main()
     if !needsRunLoop {
         // Commands that don't need the run loop can exit immediately
