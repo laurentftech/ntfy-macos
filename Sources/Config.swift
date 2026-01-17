@@ -14,6 +14,7 @@ struct TopicConfig: Codable {
     let iconSymbol: String?
     let autoRunScript: String?
     let silent: Bool?
+    let clickUrl: ClickUrlConfig?  // Control click behavior: true/false/custom URL
     let actions: [NotificationAction]?
 
     enum CodingKeys: String, CodingKey {
@@ -22,14 +23,53 @@ struct TopicConfig: Codable {
         case iconSymbol = "icon_symbol"
         case autoRunScript = "auto_run_script"
         case silent
+        case clickUrl = "click_url"
         case actions
+    }
+}
+
+/// Represents click_url config: can be a URL string, true (use default), or false (disabled)
+enum ClickUrlConfig: Codable {
+    case enabled          // true or not specified: use webUrl or url
+    case disabled         // false: don't open anything on click
+    case custom(String)   // custom URL
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let boolValue = try? container.decode(Bool.self) {
+            self = boolValue ? .enabled : .disabled
+        } else if let stringValue = try? container.decode(String.self) {
+            self = .custom(stringValue)
+        } else {
+            self = .enabled
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .enabled:
+            try container.encode(true)
+        case .disabled:
+            try container.encode(false)
+        case .custom(let url):
+            try container.encode(url)
+        }
     }
 }
 
 struct ServerConfig: Codable {
     let url: String
+    let webUrl: String?  // Optional URL to open in browser (defaults to url)
     let token: String?
     let topics: [TopicConfig]
+
+    enum CodingKeys: String, CodingKey {
+        case url
+        case webUrl = "web_url"
+        case token
+        case topics
+    }
 }
 
 struct AppConfig: Codable {
@@ -110,15 +150,22 @@ final class ConfigManager: @unchecked Sendable {
         servers:
           - url: https://ntfy.sh
             # token: your_token_here  # optional
+            # web_url: https://ntfy.sh  # optional: base URL for browser (defaults to url)
             topics:
               - name: alerts
                 icon_symbol: bell.fill
+                # click_url: false  # disable opening browser on click
                 actions:
                   - title: Acknowledge
                     type: script
                     path: /usr/local/bin/ack-alert.sh
 
+              - name: releases
+                icon_symbol: arrow.down.circle.fill
+                click_url: https://github.com/org/repo/releases  # custom URL on click
+
           - url: https://your-private-server.com
+            web_url: https://ntfy.example.com  # public URL for browser access
             token: your_private_token
             topics:
               - name: deployments
