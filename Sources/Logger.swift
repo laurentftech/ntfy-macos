@@ -1,6 +1,6 @@
 import Foundation
 
-/// Simple logger with timestamps - writes to both stdout and file
+/// Simple logger with timestamps - writes to file (with rotation) and optionally stdout
 enum Log {
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -8,7 +8,12 @@ enum Log {
         return formatter
     }()
 
-    /// Log directory for manual mode
+    /// Whether running in interactive mode (manual) - only write to stdout in this case
+    private static let isInteractiveMode: Bool = {
+        isatty(STDOUT_FILENO) != 0
+    }()
+
+    /// Log directory
     static let logDirectory: String = {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
         return homeDir.appendingPathComponent(".local/share/ntfy-macos/logs").path
@@ -76,10 +81,14 @@ enum Log {
     }
 
     private static func log(_ message: String) {
-        print(message)
-        fflush(stdout)
+        // Only write to stdout in interactive mode (manual run)
+        // In service mode, skip stdout to avoid duplicate logs in launchd files
+        if isInteractiveMode {
+            print(message)
+            fflush(stdout)
+        }
 
-        // Also write to file
+        // Always write to file (with rotation)
         if let data = (message + "\n").data(using: .utf8) {
             fileHandle?.write(data)
             try? fileHandle?.synchronize()

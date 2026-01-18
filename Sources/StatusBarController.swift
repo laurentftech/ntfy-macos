@@ -88,36 +88,16 @@ class StatusBarController: NSObject {
     }
 
     @objc func viewLogs() {
-        // Check if running interactively (manual mode) vs via launchd (brew services)
-        let isManualMode = isatty(STDOUT_FILENO) != 0
-
-        if isManualMode {
-            // Manual mode: use app's own log file
-            if FileManager.default.fileExists(atPath: Log.logFilePath) {
-                NSWorkspace.shared.selectFile(Log.logFilePath, inFileViewerRootedAtPath: Log.logDirectory)
-                return
-            }
-        } else {
-            // Service mode: use Homebrew log location
-            let homebrewLogPath = "/usr/local/var/log/ntfy-macos"
-            if FileManager.default.fileExists(atPath: homebrewLogPath) {
-                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: homebrewLogPath)
-                return
-            }
-
-            let appleLogPath = "/opt/homebrew/var/log/ntfy-macos"
-            if FileManager.default.fileExists(atPath: appleLogPath) {
-                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: appleLogPath)
-                return
-            }
+        // All logs now go to the same location with rotation
+        if FileManager.default.fileExists(atPath: Log.logFilePath) {
+            NSWorkspace.shared.selectFile(Log.logFilePath, inFileViewerRootedAtPath: Log.logDirectory)
+            return
         }
 
         // No logs found
         let alert = NSAlert()
         alert.messageText = "Logs Not Found"
-        alert.informativeText = isManualMode
-            ? "No log files found yet. Logs will be created in \(Log.logDirectory)"
-            : "No log files found at Homebrew service location."
+        alert.informativeText = "No log files found yet. Logs will be created in \(Log.logDirectory)"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
