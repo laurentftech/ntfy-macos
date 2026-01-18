@@ -31,8 +31,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     }
 
     func serve(configPath: String? = nil) {
-        print("Starting ntfy-macos service...")
-        fflush(stdout)
+        Log.info("Starting ntfy-macos service...")
 
         do {
             try ConfigManager.shared.loadConfig(from: configPath)
@@ -63,12 +62,11 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             exit(1)
         }
 
-        print("Configured servers: \(config.servers.count)")
+        Log.info("Configured servers: \(config.servers.count)")
         for server in config.servers {
             let topics = server.topics.map { $0.name }.joined(separator: ", ")
-            print("  - \(server.url): \(topics)")
+            Log.info("  - \(server.url): \(topics)")
         }
-        fflush(stdout)
 
         // Start watching config file for changes
         configWatcher = ConfigWatcher(configPath: configPath)
@@ -90,25 +88,21 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         notificationManager.getAuthorizationStatus { [weak self] status in
             guard let self = self else { return }
 
-            print("Authorization status: \(status.rawValue)")
-            fflush(stdout)
+            Log.info("Authorization status: \(status.rawValue)")
 
             if status == .authorized {
                 self.connectClients()
             } else {
                 // Request permission automatically on first launch
-                print("Requesting notification permission...")
-                fflush(stdout)
+                Log.info("Requesting notification permission...")
                 Task { @MainActor in
                     PermissionHelper.requestPermissionsWithWindow { granted in
                         if granted {
-                            print("✅ Permission granted!")
-                            fflush(stdout)
+                            Log.success("Permission granted!")
                             self.connectClients()
                         } else {
-                            print("❌ Notification permission not granted")
-                            print("   Please enable notifications in System Settings → Notifications → ntfy-macos")
-                            fflush(stdout)
+                            Log.error("Notification permission not granted")
+                            Log.info("   Please enable notifications in System Settings → Notifications → ntfy-macos")
                             exit(1)
                         }
                     }
@@ -125,8 +119,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             let topicNames = serverConfig.topics.map { $0.name }
             guard !topicNames.isEmpty else { continue }
 
-            print("Creating client for \(serverConfig.url)...")
-            fflush(stdout)
+            Log.info("Creating client for \(serverConfig.url)...")
 
             let authToken = ConfigManager.shared.getAuthToken(forServer: serverConfig.url)
             let client = NtfyClient(
@@ -137,15 +130,13 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             client.delegate = self
             self.clients.append(client)
 
-            print("Connecting to \(serverConfig.url)...")
-            fflush(stdout)
+            Log.info("Connecting to \(serverConfig.url)...")
             client.connect()
         }
     }
 
     func reloadConfig() {
-        print("Reloading configuration...")
-        fflush(stdout)
+        Log.info("Reloading configuration...")
 
         // Disconnect all clients
         for client in clients {
@@ -157,38 +148,34 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         do {
             try ConfigManager.shared.loadConfig(from: nil)
         } catch {
-            print("Failed to reload configuration: \(error)")
-            fflush(stdout)
+            Log.error("Failed to reload configuration: \(error)")
             return
         }
 
         guard let config = ConfigManager.shared.config else {
-            print("Configuration is invalid")
-            fflush(stdout)
+            Log.error("Configuration is invalid")
             return
         }
 
-        print("Reloaded servers: \(config.servers.count)")
+        Log.info("Reloaded servers: \(config.servers.count)")
         for server in config.servers {
             let topics = server.topics.map { $0.name }.joined(separator: ", ")
-            print("  - \(server.url): \(topics)")
+            Log.info("  - \(server.url): \(topics)")
         }
-        fflush(stdout)
 
         // Reconnect with new config
         startService()
     }
 
     func ntfyClient(_ client: NtfyClient, didReceiveMessage message: NtfyMessage) {
-        print("📩 Received message on topic '\(message.topic)': \(message.message ?? "")")
-        fflush(stdout)
+        Log.info("📩 Received message on topic '\(message.topic)': \(message.message ?? "")")
 
         let topicConfig = ConfigManager.shared.topicConfig(for: message.topic)
 
         // Handle auto-run scripts
         if let autoRunScript = topicConfig?.autoRunScript {
             if scriptRunner.validateScript(at: autoRunScript) {
-                print("Auto-running script: \(autoRunScript)")
+                Log.info("Auto-running script: \(autoRunScript)")
                 scriptRunner.runScript(at: autoRunScript, withArgument: message.message)
             }
         }
@@ -198,15 +185,15 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     }
 
     func ntfyClient(_ client: NtfyClient, didEncounterError error: Error) {
-        print("Error: \(error.localizedDescription)")
+        Log.error("Error: \(error.localizedDescription)")
     }
 
     func ntfyClientDidConnect(_ client: NtfyClient) {
-        print("Successfully connected to ntfy server")
+        Log.success("Connected to ntfy server")
     }
 
     func ntfyClientDidDisconnect(_ client: NtfyClient) {
-        print("Disconnected from ntfy server")
+        Log.info("Disconnected from ntfy server")
     }
 }
 
