@@ -98,18 +98,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     // Thread-safe delegate call helper
     private func callDelegate(_ block: @escaping @Sendable (NtfyClientDelegate) -> Void) {
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else {
-                print("callDelegate: self is nil")
-                fflush(stdout)
-                return
-            }
-            guard let delegate = self.delegate else {
-                print("callDelegate: delegate is nil!")
-                fflush(stdout)
-                return
-            }
-            print("callDelegate: invoking delegate")
-            fflush(stdout)
+            guard let self = self, let delegate = self.delegate else { return }
             block(delegate)
         }
     }
@@ -143,8 +132,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         dataTask = session.dataTask(with: request)
         dataTask?.resume()
 
-        print("Connecting to ntfy: \(url.absoluteString)")
-        fflush(stdout)
+        Log.info("Connecting to ntfy: \(url.absoluteString)")
     }
 
     func disconnect() {
@@ -175,13 +163,16 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         reconnectAttempts += 1
 
         if reconnectAttempts <= maxReconnectAttempts {
-            print("Reconnecting in \(delay) seconds (attempt \(reconnectAttempts)/\(maxReconnectAttempts))...")
+            Log.info("Reconnecting in \(delay) seconds (attempt \(reconnectAttempts)/\(maxReconnectAttempts))...")
 
-            reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                self?.connect()
+            // Schedule timer on main thread to ensure RunLoop is active
+            DispatchQueue.main.async { [weak self] in
+                self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                    self?.connect()
+                }
             }
         } else {
-            print("Max reconnection attempts reached. Please restart the service.")
+            Log.error("Max reconnection attempts reached. Please restart the service.")
             let error = NSError(
                 domain: "NtfyClient",
                 code: -1,
@@ -196,34 +187,23 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private func processLine(_ line: String) {
         guard !line.isEmpty else { return }
 
-        print("Processing line: \(line.prefix(100))...")
-        fflush(stdout)
-
         do {
             let data = Data(line.utf8)
             let message = try JSONDecoder().decode(NtfyMessage.self, from: data)
 
-            print("Decoded message event: \(message.event)")
-            fflush(stdout)
-
             if message.event == "message" {
-                print("Calling delegate with message...")
-                fflush(stdout)
                 callDelegate { delegate in
                     delegate.ntfyClient(self, didReceiveMessage: message)
                 }
             }
         } catch {
-            print("Failed to decode message: \(error)")
-            fflush(stdout)
+            Log.error("Failed to decode message: \(error)")
         }
     }
 }
 
 extension NtfyClient: URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        print("Received data: \(data.count) bytes")
-        fflush(stdout)
         buffer.append(data)
 
         while let newlineRange = buffer.range(of: Data("\n".utf8)) {
@@ -240,14 +220,18 @@ extension NtfyClient: URLSessionDataDelegate {
         isConnecting = false
 
         if let error = error {
-            print("Connection error: \(error.localizedDescription)")
+            // Don't log cancelled errors (normal during reconnect)
+            let nsError = error as NSError
+            if nsError.domain != NSURLErrorDomain || nsError.code != NSURLErrorCancelled {
+                Log.error("Connection error: \(error.localizedDescription)")
+            }
             callDelegate { delegate in
                 delegate.ntfyClient(self, didEncounterError: error)
                 delegate.ntfyClientDidDisconnect(self)
             }
             reconnect()
         } else {
-            print("Connection closed")
+            Log.info("Connection closed by server")
             callDelegate { delegate in
                 delegate.ntfyClientDidDisconnect(self)
             }
@@ -258,30 +242,20 @@ extension NtfyClient: URLSessionDataDelegate {
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        print("didReceive response called")
-        fflush(stdout)
-
         guard let httpResponse = response as? HTTPURLResponse else {
-            print("Not an HTTP response")
-            fflush(stdout)
             completionHandler(.cancel)
             return
         }
 
-        print("HTTP status: \(httpResponse.statusCode)")
-        fflush(stdout)
-
         if httpResponse.statusCode == 200 {
             isConnecting = false
             reconnectAttempts = 0
-            print("Connected successfully")
-            fflush(stdout)
             callDelegate { delegate in
                 delegate.ntfyClientDidConnect(self)
             }
             completionHandler(.allow)
         } else {
-            print("Server returned status code: \(httpResponse.statusCode)")
+            Log.error("Server returned status code: \(httpResponse.statusCode)")
             completionHandler(.cancel)
         }
     }
