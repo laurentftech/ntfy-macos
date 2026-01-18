@@ -120,7 +120,7 @@ The app runs in the menu bar with options to:
 - **Edit Config**: Open config file in your default editor
 - **Show Config in Finder**: Reveal config directory
 - **Reload Config**: Apply configuration changes
-- **View Logs**: Open log files (detects manual vs brew services mode)
+- **View Logs**: Open log files (with automatic rotation)
 - **About**: Credits and links
 - **Quit**: Stop the service
 
@@ -333,13 +333,10 @@ Common tags: `warning` (⚠️), `fire` (🔥), `+1` (👍), `skull` (💀), `be
 
 - Verify server URL in configuration
 - Check authentication token
-- Review service logs:
+- Review logs:
   ```bash
-  # Manual mode logs
+  # View logs (same location for manual and brew services)
   cat ~/.local/share/ntfy-macos/logs/ntfy-macos.log
-
-  # Homebrew service logs
-  cat /usr/local/var/log/ntfy-macos/stdout.log
 
   # Or follow in real-time
   tail -f ~/.local/share/ntfy-macos/logs/ntfy-macos.log
