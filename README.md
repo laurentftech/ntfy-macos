@@ -1,5 +1,11 @@
 # ntfy-macos
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/laurentftech)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-brightgreen.svg)](https://www.apple.com/macos/)
+[![Swift 6](https://img.shields.io/badge/Swift-6-orange.svg)](https://swift.org/)
+[![Homebrew](https://img.shields.io/badge/Homebrew-tap-brown.svg)](https://github.com/laurentftech/homebrew-ntfy-macos)
+
 Receive push notifications on your Mac from any source — servers, IoT devices, home automation, CI pipelines, or custom scripts. No account required, works with the public [ntfy.sh](https://ntfy.sh) service or your own self-hosted server.
 
 **ntfy-macos** is a native macOS client that subscribes to ntfy topics and delivers rich notifications with SF Symbols, images, and interactive buttons. Trigger shell scripts automatically when messages arrive.
@@ -41,11 +47,11 @@ brew install ntfy-macos
 git clone https://github.com/laurentftech/ntfy-macos.git
 cd ntfy-macos
 
-# Build
-swift build -c release
+# Build the app bundle
+./build-app.sh
 
 # Install
-sudo cp .build/release/ntfy-macos /usr/local/bin/
+sudo cp -r .build/release/ntfy-macos.app /Applications/
 ```
 
 ### Updating
@@ -171,6 +177,10 @@ servers:
 - `icon_path` (optional): Absolute path to local image file (.png, .jpg)
 - `auto_run_script` (optional): Script to execute automatically when message arrives
 - `silent` (optional): If `true`, skip notification banner (useful for background automation)
+- `click_url` (optional): Control what happens when clicking the notification:
+  - Not set or `true`: Opens `{server_url}/{topic}` in browser
+  - `false`: Disables click action
+  - `"https://..."`: Opens custom URL
 - `actions` (optional): List of interactive buttons
 
 #### Action Fields
@@ -189,11 +199,8 @@ servers:
 Start the notification service:
 
 ```bash
-ntfy-macos serve [--config PATH]
+ntfy-macos serve
 ```
-
-Options:
-- `--config PATH`: Use custom configuration file path
 
 ### auth
 
@@ -225,7 +232,7 @@ ntfy-macos test-notify --topic <NAME>
 Create a sample configuration file:
 
 ```bash
-ntfy-macos init [--path PATH]
+ntfy-macos init
 ```
 
 ### help
@@ -324,7 +331,15 @@ Common tags: `warning` (⚠️), `fire` (🔥), `+1` (👍), `skull` (💀), `be
 
 - Verify server URL in configuration
 - Check authentication token
-- Review logs for error messages
+- Review service logs:
+  ```bash
+  # Homebrew service logs
+  cat /usr/local/var/log/ntfy-macos/stdout.log
+  cat /usr/local/var/log/ntfy-macos/stderr.log
+
+  # Or follow in real-time
+  tail -f /usr/local/var/log/ntfy-macos/*.log
+  ```
 
 ### Script Not Executing
 
@@ -390,6 +405,18 @@ servers:
       - name: background-jobs
         silent: true
         auto_run_script: /usr/local/bin/process-job.sh
+```
+
+### Custom Click URL (GitHub Releases)
+
+```yaml
+servers:
+  - url: https://ntfy.sh
+    topics:
+      - name: yt-dlp-releases
+        icon_symbol: arrow.down.circle.fill
+        click_url: https://github.com/yt-dlp/yt-dlp/releases
+        auto_run_script: /usr/local/bin/update-yt-dlp.sh
 ```
 
 ## Architecture

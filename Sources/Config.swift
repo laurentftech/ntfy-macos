@@ -60,16 +60,8 @@ enum ClickUrlConfig: Codable {
 
 struct ServerConfig: Codable {
     let url: String
-    let webUrl: String?  // Optional URL to open in browser (defaults to url)
     let token: String?
     let topics: [TopicConfig]
-
-    enum CodingKeys: String, CodingKey {
-        case url
-        case webUrl = "web_url"
-        case token
-        case topics
-    }
 }
 
 struct AppConfig: Codable {
@@ -150,7 +142,6 @@ final class ConfigManager: @unchecked Sendable {
         servers:
           - url: https://ntfy.sh
             # token: your_token_here  # optional
-            # web_url: https://ntfy.sh  # optional: base URL for browser (defaults to url)
             topics:
               - name: alerts
                 icon_symbol: bell.fill
@@ -165,7 +156,6 @@ final class ConfigManager: @unchecked Sendable {
                 click_url: https://github.com/org/repo/releases  # custom URL on click
 
           - url: https://your-private-server.com
-            web_url: https://ntfy.example.com  # public URL for browser access
             token: your_private_token
             topics:
               - name: deployments
