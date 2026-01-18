@@ -88,7 +88,16 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         notificationManager.getAuthorizationStatus { [weak self] status in
             guard let self = self else { return }
 
-            Log.info("Authorization status: \(status.rawValue)")
+            let statusName: String
+            switch status {
+            case .notDetermined: statusName = "not determined"
+            case .denied: statusName = "denied"
+            case .authorized: statusName = "authorized"
+            case .provisional: statusName = "provisional"
+            case .ephemeral: statusName = "ephemeral"
+            @unknown default: statusName = "unknown"
+            }
+            Log.info("Authorization status: \(statusName)")
 
             if status == .authorized {
                 self.connectClients()
