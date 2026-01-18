@@ -54,6 +54,13 @@ class StatusBarController: NSObject {
 
         menu?.addItem(NSMenuItem.separator())
 
+        let viewLogsItem = NSMenuItem(title: "View Logs...", action: #selector(viewLogs), keyEquivalent: "l")
+        viewLogsItem.target = self
+        viewLogsItem.isEnabled = true
+        menu?.addItem(viewLogsItem)
+
+        menu?.addItem(NSMenuItem.separator())
+
         let quitItem = NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         quitItem.isEnabled = true
         menu?.addItem(quitItem)
@@ -73,6 +80,30 @@ class StatusBarController: NSObject {
 
     @objc func reloadConfig() {
         onReloadConfig?()
+    }
+
+    @objc func viewLogs() {
+        // Try Homebrew log location first
+        let homebrewLogPath = "/usr/local/var/log/ntfy-macos"
+        if FileManager.default.fileExists(atPath: homebrewLogPath) {
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: homebrewLogPath)
+            return
+        }
+
+        // Fallback: Apple Silicon Homebrew location
+        let appleLogPath = "/opt/homebrew/var/log/ntfy-macos"
+        if FileManager.default.fileExists(atPath: appleLogPath) {
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: appleLogPath)
+            return
+        }
+
+        // No logs found - show alert
+        let alert = NSAlert()
+        alert.messageText = "Logs Not Found"
+        alert.informativeText = "No log files found. Logs are only created when running via brew services."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func updateStatus(_ status: String) {
