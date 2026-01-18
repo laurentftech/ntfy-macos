@@ -153,7 +153,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             server.topics.contains { $0.name == message.topic }
         }
 
-        // Determine click URL based on topic config, fallback to server config
+        // Determine click URL based on topic config
         let clickUrl: String
         switch topicConfig.clickUrl {
         case .disabled:
@@ -161,8 +161,8 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         case .custom(let customUrl):
             clickUrl = customUrl
         case .enabled, .none:
-            // Default: use server's webUrl if defined, otherwise server url + topic
-            clickUrl = serverConfig?.webUrl ?? serverConfig?.url ?? ""
+            // Default: use server url
+            clickUrl = serverConfig?.url ?? ""
         }
 
         // Track if this is a custom URL (don't append topic) or server URL (append topic)
