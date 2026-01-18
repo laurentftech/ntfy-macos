@@ -120,6 +120,7 @@ The app runs in the menu bar with options to:
 - **Edit Config**: Open config file in your default editor
 - **Show Config in Finder**: Reveal config directory
 - **Reload Config**: Apply configuration changes
+- **View Logs**: Open Homebrew service logs in Finder
 - **Quit**: Stop the service
 
 5. **(Optional) Add to Launchpad**
