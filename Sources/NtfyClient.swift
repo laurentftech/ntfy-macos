@@ -68,9 +68,11 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 10
     private let baseReconnectDelay: TimeInterval = 2.0
+    private let maxReconnectDelay: TimeInterval = 300.0  // 5 minutes max
     private var reconnectTimer: Timer?
     private var isConnecting = false
     private var shouldReconnect = true
+    private var retryAfterDelay: TimeInterval?  // From Retry-After header
 
     init(serverURL: String, topics: [String], authToken: String? = nil) {
         self.serverURL = serverURL
@@ -159,11 +161,27 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         dataTask = nil
         isConnecting = false
 
-        let delay = min(baseReconnectDelay * pow(2.0, Double(reconnectAttempts)), 60.0)
+        // Calculate delay with exponential backoff
+        var delay: TimeInterval
+
+        if let retryAfter = retryAfterDelay {
+            // Server told us exactly when to retry (Retry-After header)
+            delay = retryAfter
+            retryAfterDelay = nil  // Clear for next time
+            Log.info("Server requested retry after \(Int(delay)) seconds")
+        } else {
+            // Exponential backoff: 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s (capped)
+            delay = min(baseReconnectDelay * pow(2.0, Double(reconnectAttempts)), maxReconnectDelay)
+        }
+
+        // Add jitter (±10%) to prevent thundering herd
+        let jitter = delay * Double.random(in: -0.1...0.1)
+        delay += jitter
+
         reconnectAttempts += 1
 
         if reconnectAttempts <= maxReconnectAttempts {
-            Log.info("Reconnecting in \(delay) seconds (attempt \(reconnectAttempts)/\(maxReconnectAttempts))...")
+            Log.info("Reconnecting in \(String(format: "%.1f", delay)) seconds (attempt \(reconnectAttempts)/\(maxReconnectAttempts))...")
 
             // Schedule timer on main thread to ensure RunLoop is active
             DispatchQueue.main.async { [weak self] in
@@ -182,6 +200,37 @@ final class NtfyClient: NSObject, @unchecked Sendable {
                 delegate.ntfyClient(self, didEncounterError: error)
             }
         }
+    }
+
+    /// Parse Retry-After header value (can be seconds or HTTP date)
+    private func parseRetryAfter(_ value: String) -> TimeInterval {
+        // Try parsing as seconds first
+        if let seconds = TimeInterval(value) {
+            return max(seconds, 1.0)  // At least 1 second
+        }
+
+        // Try parsing as HTTP date (e.g., "Sun, 18 Jan 2026 23:59:59 GMT")
+        let httpDateFormatter = DateFormatter()
+        httpDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        httpDateFormatter.timeZone = TimeZone(identifier: "GMT")
+
+        // RFC 7231 formats
+        let formats = [
+            "EEE, dd MMM yyyy HH:mm:ss zzz",  // IMF-fixdate
+            "EEEE, dd-MMM-yy HH:mm:ss zzz",   // RFC 850
+            "EEE MMM d HH:mm:ss yyyy"          // ANSI C asctime()
+        ]
+
+        for format in formats {
+            httpDateFormatter.dateFormat = format
+            if let date = httpDateFormatter.date(from: value) {
+                let delay = date.timeIntervalSinceNow
+                return max(delay, 1.0)  // At least 1 second, even if date is in past
+            }
+        }
+
+        // Fallback if parsing fails
+        return 30.0
     }
 
     private func processLine(_ line: String) {
@@ -256,6 +305,17 @@ extension NtfyClient: URLSessionDataDelegate {
             completionHandler(.allow)
         } else {
             Log.error("Server returned status code: \(httpResponse.statusCode)")
+
+            // Handle rate limiting (429) - extract Retry-After header
+            if httpResponse.statusCode == 429 {
+                if let retryAfterString = httpResponse.value(forHTTPHeaderField: "Retry-After") {
+                    retryAfterDelay = parseRetryAfter(retryAfterString)
+                } else {
+                    // No Retry-After header, use a conservative default for 429
+                    retryAfterDelay = 30.0
+                }
+            }
+
             completionHandler(.cancel)
         }
     }
