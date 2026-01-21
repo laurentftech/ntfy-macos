@@ -91,6 +91,14 @@ final class ScriptRunner: @unchecked Sendable {
 
     /// Runs a script synchronously and returns the output (useful for testing)
     func runScriptSynchronously(at path: String, withArgument argument: String? = nil) -> (exitCode: Int32, output: String, error: String) {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+
+        guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return (-1, "", "Failed to execute: Script not found or is a directory")
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = [path]

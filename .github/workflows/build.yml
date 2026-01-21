@@ -24,6 +24,9 @@ jobs:
       - name: Build
         run: swift build -c release
 
+      - name: Run tests
+        run: swift test
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
