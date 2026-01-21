@@ -20,6 +20,9 @@ jobs:
       - name: Get version
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Run tests
+        run: swift test
       
       - name: Build and Sign app bundle
         run: |
