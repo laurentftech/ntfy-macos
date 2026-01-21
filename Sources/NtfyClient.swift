@@ -203,7 +203,8 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     }
 
     /// Parse Retry-After header value (can be seconds or HTTP date)
-    private func parseRetryAfter(_ value: String) -> TimeInterval {
+    /// Internal for testing
+    func parseRetryAfter(_ value: String) -> TimeInterval {
         // Try parsing as seconds first
         if let seconds = TimeInterval(value) {
             return max(seconds, 1.0)  // At least 1 second
