@@ -20,6 +20,11 @@ let package = Package(
             name: "ntfy-macos",
             dependencies: ["Yams"],
             path: "Sources"
+        ),
+        .testTarget(
+            name: "ntfy-macosTests",
+            dependencies: ["ntfy-macos", "Yams"],
+            path: "Tests/ntfy-macosTests"
         )
     ]
 )
