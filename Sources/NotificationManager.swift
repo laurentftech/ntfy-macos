@@ -153,25 +153,33 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             server.topics.contains { $0.name == message.topic }
         }
 
-        // Determine click URL based on topic config
+        // Determine click URL. Priority order:
+        // 1. `click_url` from topic config (`false`, custom URL)
+        // 2. `click` URL from the message itself
+        // 3. Default server URL
         let clickUrl: String
-        switch topicConfig.clickUrl {
-        case .disabled:
-            clickUrl = ""  // Empty string means disabled
-        case .custom(let customUrl):
-            clickUrl = customUrl
-        case .enabled, .none:
-            // Default: use server url
-            clickUrl = serverConfig?.url ?? ""
-        }
-
-        // Track if this is a custom URL (don't append topic) or server URL (append topic)
         let isCustomClickUrl: Bool
+
         switch topicConfig.clickUrl {
-        case .custom:
+        case .custom(let customUrl):
+            // 1. Highest priority: custom URL from config
+            clickUrl = customUrl
             isCustomClickUrl = true
-        default:
-            isCustomClickUrl = false
+        case .disabled:
+            // 1. Highest priority: disabled from config
+            clickUrl = ""
+            isCustomClickUrl = false // Not applicable
+        case .enabled, .none:
+            // Config doesn't specify an override, so check the message
+            if let messageClickUrl = message.click, !messageClickUrl.isEmpty {
+                // 2. Next priority: URL from the message
+                clickUrl = messageClickUrl
+                isCustomClickUrl = true
+            } else {
+                // 3. Fallback: default server URL
+                clickUrl = serverConfig?.url ?? ""
+                isCustomClickUrl = false
+            }
         }
 
         var userInfo: [String: Any] = [
