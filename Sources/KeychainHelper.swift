@@ -11,7 +11,8 @@ enum KeychainError: Error {
 struct KeychainHelper {
     private static let service = "com.ntfy-macos.auth"
 
-    /// Stores an authentication token in the Keychain for a given server URL
+    /// Stores an authentication token in the Keychain for a given server URL.
+    /// This function performs an "upsert": it updates the token if it exists, or adds it if it doesn't.
     static func saveToken(_ token: String, forServer server: String) throws {
         guard let tokenData = token.data(using: .utf8) else {
             throw KeychainError.invalidData
@@ -20,17 +21,27 @@ struct KeychainHelper {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: server,
-            kSecValueData as String: tokenData
+            kSecAttrAccount as String: server
         ]
 
-        // Delete existing item if present
-        SecItemDelete(query as CFDictionary)
+        // First, try to update an existing item
+        let attributes: [String: Any] = [kSecValueData as String: tokenData]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
 
-        // Add new item
-        let status = SecItemAdd(query as CFDictionary, nil)
-
-        guard status == errSecSuccess else {
+        switch status {
+        case errSecSuccess:
+            // Update successful
+            return
+        case errSecItemNotFound:
+            // Item not found, so add it
+            var addQuery = query
+            addQuery[kSecValueData as String] = tokenData
+            let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+            if addStatus != errSecSuccess {
+                throw KeychainError.unexpectedStatus(addStatus)
+            }
+        default:
+            // Another error occurred during update
             throw KeychainError.unexpectedStatus(status)
         }
     }
