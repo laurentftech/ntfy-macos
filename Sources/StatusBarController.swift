@@ -4,7 +4,18 @@ import AppKit
 class StatusBarController: NSObject {
     private var statusItem: NSStatusItem?
     private var menu: NSMenu?
+    private var statusMenuItem: NSMenuItem?
+    private var serversSubmenu: NSMenu?
     var onReloadConfig: (() -> Void)?
+
+    // Connection tracking
+    private var serverStatuses: [String: ServerConnectionStatus] = [:]
+
+    struct ServerConnectionStatus {
+        let url: String
+        let topics: [String]
+        var isConnected: Bool
+    }
 
     static let shared = StatusBarController()
 
@@ -31,9 +42,15 @@ class StatusBarController: NSObject {
         menu = NSMenu()
         menu?.autoenablesItems = false
 
-        let statusMenuItem = NSMenuItem(title: "ntfy-macos running", action: nil, keyEquivalent: "")
-        statusMenuItem.isEnabled = false
-        menu?.addItem(statusMenuItem)
+        statusMenuItem = NSMenuItem(title: "Connecting...", action: nil, keyEquivalent: "")
+        statusMenuItem?.isEnabled = false
+        menu?.addItem(statusMenuItem!)
+
+        // Servers submenu showing individual server statuses
+        let serversItem = NSMenuItem(title: "Servers", action: nil, keyEquivalent: "")
+        serversSubmenu = NSMenu()
+        serversItem.submenu = serversSubmenu
+        menu?.addItem(serversItem)
 
         menu?.addItem(NSMenuItem.separator())
 
@@ -122,7 +139,7 @@ class StatusBarController: NSObject {
         contentView.addSubview(titleLabel)
 
         // Version
-        let versionLabel = NSTextField(labelWithString: "Version 0.1.5")
+        let versionLabel = NSTextField(labelWithString: "Version \(AppConstants.effectiveVersion)")
         versionLabel.font = NSFont.systemFont(ofSize: 12)
         versionLabel.textColor = .secondaryLabelColor
         versionLabel.frame = NSRect(x: 20, y: 135, width: 300, height: 18)
@@ -182,8 +199,81 @@ class StatusBarController: NSObject {
     }
 
     func updateStatus(_ status: String) {
-        if let item = menu?.items.first {
-            item.title = status
+        statusMenuItem?.title = status
+    }
+
+    /// Initialize server tracking from config
+    func initializeServers(servers: [(url: String, topics: [String])]) {
+        serverStatuses.removeAll()
+        for server in servers {
+            serverStatuses[server.url] = ServerConnectionStatus(
+                url: server.url,
+                topics: server.topics,
+                isConnected: false
+            )
+        }
+        refreshServersSubmenu()
+        refreshMainStatus()
+    }
+
+    /// Update connection status for a specific server
+    func setServerConnected(_ serverUrl: String, connected: Bool) {
+        if var status = serverStatuses[serverUrl] {
+            status.isConnected = connected
+            serverStatuses[serverUrl] = status
+            refreshServersSubmenu()
+            refreshMainStatus()
+        }
+    }
+
+    private func refreshMainStatus() {
+        let totalServers = serverStatuses.count
+        let connectedServers = serverStatuses.values.filter { $0.isConnected }.count
+        let totalTopics = serverStatuses.values.flatMap { $0.topics }.count
+
+        if totalServers == 0 {
+            statusMenuItem?.title = "No servers configured"
+        } else if connectedServers == totalServers {
+            let topicText = totalTopics == 1 ? "topic" : "topics"
+            let serverText = totalServers == 1 ? "server" : "servers"
+            statusMenuItem?.title = "\(totalTopics) \(topicText) on \(totalServers) \(serverText)"
+        } else if connectedServers == 0 {
+            statusMenuItem?.title = "Connecting..."
+        } else {
+            statusMenuItem?.title = "\(connectedServers)/\(totalServers) servers connected"
+        }
+    }
+
+    private func refreshServersSubmenu() {
+        serversSubmenu?.removeAllItems()
+
+        if serverStatuses.isEmpty {
+            let noServersItem = NSMenuItem(title: "No servers configured", action: nil, keyEquivalent: "")
+            noServersItem.isEnabled = false
+            serversSubmenu?.addItem(noServersItem)
+            return
+        }
+
+        for (_, status) in serverStatuses.sorted(by: { $0.key < $1.key }) {
+            let statusIcon = status.isConnected ? "✓" : "○"
+            let topicsText = status.topics.joined(separator: ", ")
+            let title = "\(statusIcon) \(status.url)"
+
+            let serverItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            serverItem.isEnabled = false
+
+            // Add tooltip with topics
+            serverItem.toolTip = "Topics: \(topicsText)"
+
+            serversSubmenu?.addItem(serverItem)
+
+            // Add topics as indented subitems
+            for topic in status.topics {
+                let topicItem = NSMenuItem(title: "    \(topic)", action: nil, keyEquivalent: "")
+                topicItem.isEnabled = false
+                topicItem.indentationLevel = 1
+                serversSubmenu?.addItem(topicItem)
+            }
         }
     }
 }

@@ -5,15 +5,22 @@ import AppKit
 /// App constants - used when running via symlink where Bundle.main.bundleIdentifier is nil
 enum AppConstants {
     static let bundleIdentifier = "com.laurentftech.ntfy-macos"
+    static let version = "0.1.6"
 
     /// Returns the bundle identifier, falling back to hardcoded value if running via symlink
     static var effectiveBundleIdentifier: String {
         Bundle.main.bundleIdentifier ?? bundleIdentifier
     }
+
+    /// Returns the app version from bundle or falls back to hardcoded value
+    static var effectiveVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? version
+    }
 }
 
 final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     private var clients: [NtfyClient] = []
+    private var clientToServer: [ObjectIdentifier: String] = [:]  // Maps client to server URL
     private var notificationManager: NotificationManager?
     private let scriptRunner = ScriptRunner()
     private var configWatcher: ConfigWatcher?
@@ -123,6 +130,14 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     private func connectClients() {
         guard let config = ConfigManager.shared.config else { return }
 
+        // Initialize status bar with server info
+        let serverInfos = config.servers.map { server in
+            (url: server.url, topics: server.topics.map { $0.name })
+        }
+        Task { @MainActor in
+            StatusBarController.shared.initializeServers(servers: serverInfos)
+        }
+
         // Create a client for each server
         for serverConfig in config.servers {
             let topicNames = serverConfig.topics.map { $0.name }
@@ -138,6 +153,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             )
             client.delegate = self
             self.clients.append(client)
+            self.clientToServer[ObjectIdentifier(client)] = serverConfig.url
 
             Log.info("Connecting to \(serverConfig.url)...")
             client.connect()
@@ -152,6 +168,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             client.disconnect()
         }
         clients.removeAll()
+        clientToServer.removeAll()
 
         // Reload config file
         do {
@@ -198,11 +215,25 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     }
 
     func ntfyClientDidConnect(_ client: NtfyClient) {
-        Log.success("Connected to ntfy server")
+        if let serverUrl = clientToServer[ObjectIdentifier(client)] {
+            Log.success("Connected to \(serverUrl)")
+            Task { @MainActor in
+                StatusBarController.shared.setServerConnected(serverUrl, connected: true)
+            }
+        } else {
+            Log.success("Connected to ntfy server")
+        }
     }
 
     func ntfyClientDidDisconnect(_ client: NtfyClient) {
-        Log.info("Disconnected from ntfy server")
+        if let serverUrl = clientToServer[ObjectIdentifier(client)] {
+            Log.info("Disconnected from \(serverUrl)")
+            Task { @MainActor in
+                StatusBarController.shared.setServerConnected(serverUrl, connected: false)
+            }
+        } else {
+            Log.info("Disconnected from ntfy server")
+        }
     }
 }
 
