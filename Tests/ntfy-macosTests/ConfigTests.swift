@@ -123,4 +123,221 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(topic.actions?[1].type, "view")
         XCTAssertEqual(topic.actions?[1].url, "https://example.com")
     }
+
+    // MARK: - Per-Server AllowedSchemes Tests
+
+    func testServerAllowedSchemesDefaultsToHttpAndHttps() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertNil(server.allowedSchemes)
+        XCTAssertEqual(server.effectiveAllowedSchemes, ["http", "https"])
+    }
+
+    func testServerAllowedSchemesCustomConfig() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        allowed_schemes:
+          - http
+          - https
+          - ntfy
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertEqual(server.allowedSchemes, ["http", "https", "ntfy"])
+        XCTAssertEqual(server.effectiveAllowedSchemes, ["http", "https", "ntfy"])
+    }
+
+    func testServerIsSchemeAllowedWithDefaultSchemes() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "https://example.com")!))
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "http://example.com")!))
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "HTTP://example.com")!))
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "HTTPS://example.com")!))
+        XCTAssertFalse(server.isSchemeAllowed(URL(string: "file:///etc/passwd")!))
+        XCTAssertFalse(server.isSchemeAllowed(URL(string: "javascript:alert(1)")!))
+        XCTAssertFalse(server.isSchemeAllowed(URL(string: "ftp://example.com")!))
+    }
+
+    func testServerIsSchemeAllowedWithCustomSchemes() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        allowed_schemes:
+          - https
+          - ntfy
+          - myapp
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "https://example.com")!))
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "ntfy://topic")!))
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "myapp://action")!))
+        XCTAssertTrue(server.isSchemeAllowed(URL(string: "NTFY://topic")!))
+        XCTAssertFalse(server.isSchemeAllowed(URL(string: "http://example.com")!))
+        XCTAssertFalse(server.isSchemeAllowed(URL(string: "file:///etc/passwd")!))
+    }
+
+    func testServerIsSchemeAllowedWithEmptySchemes() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        allowed_schemes: []
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertEqual(server.allowedSchemes, [])
+        XCTAssertFalse(server.isSchemeAllowed(URL(string: "https://example.com")!))
+        XCTAssertFalse(server.isSchemeAllowed(URL(string: "http://example.com")!))
+    }
+
+    // MARK: - Per-Server AllowedDomains Tests
+
+    func testServerAllowedDomainsNotConfigured() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertNil(server.allowedDomains)
+        // When not configured, all domains are allowed
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://example.com")!))
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://evil.com")!))
+    }
+
+    func testServerAllowedDomainsExactMatch() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        allowed_domains:
+          - example.com
+          - trusted.org
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://example.com/path")!))
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://trusted.org")!))
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://EXAMPLE.COM")!))  // case insensitive
+        XCTAssertFalse(server.isDomainAllowed(URL(string: "https://evil.com")!))
+        XCTAssertFalse(server.isDomainAllowed(URL(string: "https://sub.example.com")!))  // subdomain not matched
+    }
+
+    func testServerAllowedDomainsWildcard() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        allowed_domains:
+          - "*.example.com"
+          - trusted.org
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://sub.example.com")!))
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://deep.sub.example.com")!))
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://example.com")!))  // base domain also matches
+        XCTAssertTrue(server.isDomainAllowed(URL(string: "https://trusted.org")!))
+        XCTAssertFalse(server.isDomainAllowed(URL(string: "https://evil.com")!))
+        XCTAssertFalse(server.isDomainAllowed(URL(string: "https://example.com.evil.com")!))
+    }
+
+    func testServerAllowedDomainsEmpty() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        allowed_domains: []
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        // Empty list means no domains allowed (different from not configured)
+        XCTAssertEqual(server.allowedDomains, [])
+        XCTAssertFalse(server.isDomainAllowed(URL(string: "https://example.com")!))
+    }
+
+    func testServerIsUrlAllowedCombined() throws {
+        let yaml = """
+        url: https://ntfy.sh
+        topics:
+          - name: test
+        allowed_schemes:
+          - https
+        allowed_domains:
+          - example.com
+        """
+        let decoder = YAMLDecoder()
+        let server = try decoder.decode(ServerConfig.self, from: yaml)
+
+        XCTAssertTrue(server.isUrlAllowed(URL(string: "https://example.com")!))
+        XCTAssertFalse(server.isUrlAllowed(URL(string: "http://example.com")!))  // wrong scheme
+        XCTAssertFalse(server.isUrlAllowed(URL(string: "https://evil.com")!))    // wrong domain
+        XCTAssertFalse(server.isUrlAllowed(URL(string: "http://evil.com")!))     // both wrong
+    }
+
+    // MARK: - AppConfig serverConfig(forTopic:) Tests
+
+    func testAppConfigServerConfigForTopic() throws {
+        let yaml = """
+        servers:
+          - url: https://server1.com
+            topics:
+              - name: topic1
+          - url: https://server2.com
+            allowed_schemes:
+              - https
+              - custom
+            topics:
+              - name: topic2
+        """
+        let decoder = YAMLDecoder()
+        let config = try decoder.decode(AppConfig.self, from: yaml)
+
+        let server1 = config.serverConfig(forTopic: "topic1")
+        XCTAssertEqual(server1?.url, "https://server1.com")
+        XCTAssertEqual(server1?.effectiveAllowedSchemes, ["http", "https"])
+
+        let server2 = config.serverConfig(forTopic: "topic2")
+        XCTAssertEqual(server2?.url, "https://server2.com")
+        XCTAssertEqual(server2?.effectiveAllowedSchemes, ["https", "custom"])
+
+        let serverNone = config.serverConfig(forTopic: "nonexistent")
+        XCTAssertNil(serverNone)
+    }
+
+    // MARK: - Config File Permissions Tests
+
+    func testConfigErrorInsecurePermissionsDescription() throws {
+        let error = ConfigError.insecureFilePermissions("Test message")
+        if case .insecureFilePermissions(let message) = error {
+            XCTAssertEqual(message, "Test message")
+        } else {
+            XCTFail("Expected insecureFilePermissions error")
+        }
+    }
 }
