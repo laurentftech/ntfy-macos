@@ -219,7 +219,13 @@ final class ConfigManager: @unchecked Sendable {
         # ntfy-macos configuration file
         servers:
           - url: https://ntfy.sh
-            # token: your_token_here  # optional
+            # token: your_token_here  # optional, or use 'ntfy-macos auth add'
+            # allowed_schemes:  # optional, defaults to [http, https]
+            #   - https
+            #   - myapp
+            # allowed_domains:  # optional, restrict URLs to specific domains
+            #   - example.com
+            #   - "*.trusted.org"
             topics:
               - name: alerts
                 icon_symbol: bell.fill

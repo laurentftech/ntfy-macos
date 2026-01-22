@@ -33,7 +33,8 @@ class NotificationActionResolverTests: XCTestCase {
                     clear: nil
                 )
             ],
-            attachment: nil
+            attachment: nil,
+            contentType: nil
         )
 
         let resolver = NotificationActionResolver()
@@ -64,7 +65,8 @@ class NotificationActionResolverTests: XCTestCase {
                     clear: nil
                 )
             ],
-            attachment: nil
+            attachment: nil,
+            contentType: nil
         )
 
         let resolver = NotificationActionResolver()
@@ -85,7 +87,8 @@ class NotificationActionResolverTests: XCTestCase {
             tags: nil,
             click: "https://example.com/click",
             actions: [],
-            attachment: nil
+            attachment: nil,
+            contentType: nil
         )
 
         let resolver = NotificationActionResolver()
@@ -106,7 +109,8 @@ class NotificationActionResolverTests: XCTestCase {
             tags: nil,
             click: nil,
             actions: [],
-            attachment: nil
+            attachment: nil,
+            contentType: nil
         )
 
         let resolver = NotificationActionResolver()
@@ -137,7 +141,8 @@ class NotificationActionResolverTests: XCTestCase {
                     clear: nil
                 )
             ],
-            attachment: nil
+            attachment: nil,
+            contentType: nil
         )
 
         let resolver = NotificationActionResolver()
