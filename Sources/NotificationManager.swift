@@ -361,7 +361,35 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Shows a test notification for a specific topic
+    /// Opens a URL securely by validating its scheme and domain against the allowed values in server config
+    /// - Parameters:
+    ///   - url: The URL to open
+    ///   - topic: The topic name to look up the server config (for per-server security settings)
+    private func openUrlSecurely(_ url: URL, forTopic topic: String?) {
+        let serverConfig = topic.flatMap { ConfigManager.shared.config?.serverConfig(forTopic: $0) }
+
+        // Validate scheme
+        let isSchemeAllowed = serverConfig?.isSchemeAllowed(url) ?? ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+        guard isSchemeAllowed else {
+            let allowedSchemes = serverConfig?.effectiveAllowedSchemes ?? ["http", "https"]
+            Log.info("Refusing to open URL with untrusted scheme: \(url.scheme ?? "nil") (\(url.absoluteString)). Allowed schemes: \(allowedSchemes)")
+            return
+        }
+
+        // Validate domain
+        let isDomainAllowed = serverConfig?.isDomainAllowed(url) ?? true
+        guard isDomainAllowed else {
+            let allowedDomains = serverConfig?.allowedDomains ?? []
+            Log.info("Refusing to open URL with untrusted domain: \(url.host ?? "nil") (\(url.absoluteString)). Allowed domains: \(allowedDomains)")
+            return
+        }
+
+        Log.info("Opening URL: \(url.absoluteString)")
+        DispatchQueue.main.async {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     func showTestNotification(topic: String) {
         let content = UNMutableNotificationContent()
         content.title = "Test Notification"
@@ -425,9 +453,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         if let url = URL(string: webUrlString) {
             print("Opening notification in web: \(webUrlString)")
             fflush(stdout)
-            DispatchQueue.main.async {
-                NSWorkspace.shared.open(url)
-            }
+            openUrlSecurely(url, forTopic: topic)
         }
     }
 
@@ -442,9 +468,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
            let url = URL(string: urlString) {
             print("Opening URL from ntfy action: \(urlString)")
             fflush(stdout)
-            DispatchQueue.main.async {
-                NSWorkspace.shared.open(url)
-            }
+            openUrlSecurely(url, forTopic: topic)
             return
         }
 
@@ -466,9 +490,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             } else if action.type == "view", let urlString = action.url, let url = URL(string: urlString) {
                 print("Opening URL from config action: \(urlString)")
                 fflush(stdout)
-                DispatchQueue.main.async {
-                    NSWorkspace.shared.open(url)
-                }
+                openUrlSecurely(url, forTopic: topic)
             }
         }
     }
