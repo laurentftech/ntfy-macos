@@ -117,8 +117,9 @@ final class NotificationManager: NSObject, @unchecked Sendable {
 
         let content = UNMutableNotificationContent()
         let emojiPrefix = EmojiTags.emojiPrefix(for: message.tags)
-        content.title = emojiPrefix + (message.title ?? "\(message.topic)")
-        content.body = message.message ?? "\(message.topic)"
+        // Use plain text versions to strip markdown syntax (macOS notifications don't render markdown)
+        content.title = emojiPrefix + (message.plainTextTitle ?? message.title ?? "\(message.topic)")
+        content.body = message.plainTextMessage ?? message.message ?? "\(message.topic)"
         // Use Glass sound to distinguish from other notification services
         content.sound = UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
 
@@ -238,8 +239,9 @@ final class NotificationManager: NSObject, @unchecked Sendable {
     private func showBasicNotification(for message: NtfyMessage) {
         let content = UNMutableNotificationContent()
         let emojiPrefix = EmojiTags.emojiPrefix(for: message.tags)
-        content.title = emojiPrefix + (message.title ?? "ntfy-macos")
-        content.body = message.message ?? ""
+        // Use plain text versions to strip markdown syntax (macOS notifications don't render markdown)
+        content.title = emojiPrefix + (message.plainTextTitle ?? message.title ?? "ntfy-macos")
+        content.body = message.plainTextMessage ?? message.message ?? ""
         // Use Glass sound to distinguish from other notification services
         content.sound = UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
 

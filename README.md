@@ -171,6 +171,8 @@ servers:
 - `url` (required): Server URL (e.g., `https://ntfy.sh`)
 - `token` (optional): Authentication token (can also be stored in Keychain)
 - `topics` (required): List of topics to subscribe to
+- `allowed_schemes` (optional): List of URL schemes allowed for click/action URLs (default: `["http", "https"]`)
+- `allowed_domains` (optional): List of domains allowed for click/action URLs (supports wildcards like `*.example.com`)
 
 #### Topic Fields
 
@@ -281,6 +283,26 @@ Scripts are **only executed if explicitly configured** in your local `config.yml
 - For public topics, avoid `auto_run_script` — use interactive action buttons instead, so you can review notifications before triggering scripts
 - Keep your configuration file secure (`chmod 600 ~/.config/ntfy-macos/config.yml`)
 - For sensitive automation, use a self-hosted ntfy server with authentication
+- Use `allowed_schemes` and `allowed_domains` to restrict which URLs can be opened from notifications
+
+**URL Security**: By default, only `http` and `https` URLs can be opened from notifications. You can customize this per-server:
+
+```yaml
+servers:
+  - url: https://ntfy.sh
+    # Only allow https and your custom app scheme
+    allowed_schemes:
+      - https
+      - myapp
+    # Only allow URLs from these domains
+    allowed_domains:
+      - example.com
+      - "*.trusted.org"  # Wildcards supported
+    topics:
+      - name: alerts
+```
+
+**Note**: The config file is validated at startup — world-writable config files are rejected for security.
 
 ## Priority Mapping
 
@@ -302,6 +324,18 @@ You can use any SF Symbol name for icons. Common examples:
 - `gear` - Settings icon
 
 Browse all symbols using the SF Symbols app (free from Apple).
+
+## Markdown Messages
+
+ntfy supports [markdown formatting](https://docs.ntfy.sh/publish/#markdown-formatting) when you set the `X-Markdown` header or `Content-Type: text/markdown`. However, **macOS native notifications only support plain text** — they cannot render formatted markdown.
+
+ntfy-macos automatically strips markdown syntax from messages for cleaner display:
+- `**bold**` → bold
+- `[link](url)` → link
+- `` `code` `` → code
+- Headers, lists, blockquotes → plain text
+
+To view the fully formatted message, click the notification to open it in the ntfy web interface.
 
 ## Emoji Tags
 
@@ -418,6 +452,22 @@ servers:
         icon_symbol: arrow.down.circle.fill
         click_url: https://github.com/yt-dlp/yt-dlp/releases
         auto_run_script: /usr/local/bin/update-yt-dlp.sh
+```
+
+### Restricted URL Security
+
+```yaml
+servers:
+  - url: https://ntfy.sh
+    # Only allow https URLs to specific domains
+    allowed_schemes:
+      - https
+    allowed_domains:
+      - github.com
+      - "*.example.com"
+    topics:
+      - name: releases
+        icon_symbol: arrow.down.circle.fill
 ```
 
 ## Architecture

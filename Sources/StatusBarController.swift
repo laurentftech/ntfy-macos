@@ -10,11 +10,30 @@ class StatusBarController: NSObject {
 
     // Connection tracking
     private var serverStatuses: [String: ServerConnectionStatus] = [:]
+    private var connectingAnimationTimer: Timer?
+    private var connectingAnimationVisible: Bool = true
+
+    enum ConnectionState {
+        case connecting    // Never connected yet (orange, flashing)
+        case connected     // Currently connected (green)
+        case disconnected  // Was connected, now lost (red)
+    }
 
     struct ServerConnectionStatus {
         let url: String
         let topics: [String]
         var isConnected: Bool
+        var hasEverConnected: Bool  // Track if we've ever successfully connected
+
+        var state: ConnectionState {
+            if isConnected {
+                return .connected
+            } else if hasEverConnected {
+                return .disconnected
+            } else {
+                return .connecting
+            }
+        }
     }
 
     static let shared = StatusBarController()
@@ -204,43 +223,135 @@ class StatusBarController: NSObject {
 
     /// Initialize server tracking from config
     func initializeServers(servers: [(url: String, topics: [String])]) {
+        stopConnectingAnimation()
         serverStatuses.removeAll()
         for server in servers {
             serverStatuses[server.url] = ServerConnectionStatus(
                 url: server.url,
                 topics: server.topics,
-                isConnected: false
+                isConnected: false,
+                hasEverConnected: false
             )
         }
         refreshServersSubmenu()
         refreshMainStatus()
+        startConnectingAnimationIfNeeded()
     }
 
     /// Update connection status for a specific server
     func setServerConnected(_ serverUrl: String, connected: Bool) {
         if var status = serverStatuses[serverUrl] {
             status.isConnected = connected
+            if connected {
+                status.hasEverConnected = true
+            }
             serverStatuses[serverUrl] = status
             refreshServersSubmenu()
             refreshMainStatus()
+            updateConnectingAnimation()
         }
+    }
+
+    // MARK: - Connecting Animation
+
+    private func startConnectingAnimationIfNeeded() {
+        let hasConnectingServers = serverStatuses.values.contains { $0.state == .connecting }
+        if hasConnectingServers && connectingAnimationTimer == nil {
+            connectingAnimationVisible = true
+            connectingAnimationTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.toggleConnectingAnimation()
+                }
+            }
+        }
+    }
+
+    private func stopConnectingAnimation() {
+        connectingAnimationTimer?.invalidate()
+        connectingAnimationTimer = nil
+        connectingAnimationVisible = true
+    }
+
+    private func updateConnectingAnimation() {
+        let hasConnectingServers = serverStatuses.values.contains { $0.state == .connecting }
+        if hasConnectingServers {
+            startConnectingAnimationIfNeeded()
+        } else {
+            stopConnectingAnimation()
+        }
+    }
+
+    private func toggleConnectingAnimation() {
+        connectingAnimationVisible.toggle()
+        refreshMainStatus()
+        refreshServersSubmenu()
     }
 
     private func refreshMainStatus() {
         let totalServers = serverStatuses.count
-        let connectedServers = serverStatuses.values.filter { $0.isConnected }.count
+        let connectedServers = serverStatuses.values.filter { $0.state == .connected }.count
+        let connectingServers = serverStatuses.values.filter { $0.state == .connecting }.count
+        let disconnectedServers = serverStatuses.values.filter { $0.state == .disconnected }.count
         let totalTopics = serverStatuses.values.flatMap { $0.topics }.count
 
+        let attributedTitle = NSMutableAttributedString()
+        let textAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13)
+        ]
+
         if totalServers == 0 {
-            statusMenuItem?.title = "No servers configured"
+            statusMenuItem?.attributedTitle = NSAttributedString(
+                string: "No servers configured",
+                attributes: textAttrs
+            )
         } else if connectedServers == totalServers {
+            // Green indicator for all connected
+            let statusAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: NSColor.systemGreen,
+                .font: NSFont.systemFont(ofSize: 13)
+            ]
+            attributedTitle.append(NSAttributedString(string: "● ", attributes: statusAttrs))
+
             let topicText = totalTopics == 1 ? "topic" : "topics"
             let serverText = totalServers == 1 ? "server" : "servers"
-            statusMenuItem?.title = "\(totalTopics) \(topicText) on \(totalServers) \(serverText)"
-        } else if connectedServers == 0 {
-            statusMenuItem?.title = "Connecting..."
+            attributedTitle.append(NSAttributedString(
+                string: "\(totalTopics) \(topicText) on \(totalServers) \(serverText)",
+                attributes: textAttrs
+            ))
+            statusMenuItem?.attributedTitle = attributedTitle
+        } else if connectingServers > 0 && disconnectedServers == 0 && connectedServers == 0 {
+            // All servers are still connecting (flashing orange)
+            let statusAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: connectingAnimationVisible ? NSColor.systemOrange : NSColor.clear,
+                .font: NSFont.systemFont(ofSize: 13)
+            ]
+            attributedTitle.append(NSAttributedString(string: "● ", attributes: statusAttrs))
+            attributedTitle.append(NSAttributedString(string: "Connecting...", attributes: textAttrs))
+            statusMenuItem?.attributedTitle = attributedTitle
+        } else if disconnectedServers > 0 {
+            // Some servers disconnected (red indicator)
+            let statusAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: NSColor.systemRed,
+                .font: NSFont.systemFont(ofSize: 13)
+            ]
+            attributedTitle.append(NSAttributedString(string: "● ", attributes: statusAttrs))
+            attributedTitle.append(NSAttributedString(
+                string: "\(connectedServers)/\(totalServers) servers connected",
+                attributes: textAttrs
+            ))
+            statusMenuItem?.attributedTitle = attributedTitle
         } else {
-            statusMenuItem?.title = "\(connectedServers)/\(totalServers) servers connected"
+            // Mixed state: some connected, some connecting (orange)
+            let statusAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: connectingAnimationVisible ? NSColor.systemOrange : NSColor.clear,
+                .font: NSFont.systemFont(ofSize: 13)
+            ]
+            attributedTitle.append(NSAttributedString(string: "● ", attributes: statusAttrs))
+            attributedTitle.append(NSAttributedString(
+                string: "\(connectedServers)/\(totalServers) servers connected",
+                attributes: textAttrs
+            ))
+            statusMenuItem?.attributedTitle = attributedTitle
         }
     }
 
@@ -255,15 +366,54 @@ class StatusBarController: NSObject {
         }
 
         for (_, status) in serverStatuses.sorted(by: { $0.key < $1.key }) {
-            let statusIcon = status.isConnected ? "✓" : "○"
             let topicsText = status.topics.joined(separator: ", ")
-            let title = "\(statusIcon) \(status.url)"
 
-            let serverItem = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            // Create attributed string with colored status indicator
+            let serverItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
             serverItem.isEnabled = false
 
-            // Add tooltip with topics
-            serverItem.toolTip = "Topics: \(topicsText)"
+            let attributedTitle = NSMutableAttributedString()
+
+            // Status indicator with color based on connection state
+            let statusIcon: String
+            let statusColor: NSColor
+
+            switch status.state {
+            case .connected:
+                statusIcon = "●"
+                statusColor = NSColor.systemGreen
+            case .disconnected:
+                statusIcon = "●"
+                statusColor = NSColor.systemRed
+            case .connecting:
+                statusIcon = "●"
+                // Flashing effect for connecting
+                statusColor = connectingAnimationVisible ? NSColor.systemOrange : NSColor.clear
+            }
+
+            let statusAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: statusColor,
+                .font: NSFont.systemFont(ofSize: 13)
+            ]
+            attributedTitle.append(NSAttributedString(string: "\(statusIcon) ", attributes: statusAttrs))
+
+            // Server URL in normal color
+            let urlAttrs: [NSAttributedString.Key: Any] = [
+                .foregroundColor: NSColor.labelColor,
+                .font: NSFont.systemFont(ofSize: 13)
+            ]
+            attributedTitle.append(NSAttributedString(string: status.url, attributes: urlAttrs))
+
+            serverItem.attributedTitle = attributedTitle
+
+            // Add tooltip with topics and state
+            let stateText: String
+            switch status.state {
+            case .connected: stateText = "Connected"
+            case .disconnected: stateText = "Disconnected"
+            case .connecting: stateText = "Connecting..."
+            }
+            serverItem.toolTip = "\(stateText)\nTopics: \(topicsText)"
 
             serversSubmenu?.addItem(serverItem)
 
