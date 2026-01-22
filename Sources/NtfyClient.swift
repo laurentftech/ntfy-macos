@@ -19,6 +19,31 @@ struct NtfyMessage: Codable {
     let click: String?
     let actions: [NtfyAction]?
     let attachment: NtfyAttachment?
+    let contentType: String?  // "text/markdown" when markdown is enabled
+
+    enum CodingKeys: String, CodingKey {
+        case id, time, event, topic, message, title, priority, tags, click, actions, attachment
+        case contentType = "content_type"
+    }
+
+    /// Returns true if this message contains markdown content
+    var isMarkdown: Bool {
+        contentType?.lowercased() == "text/markdown"
+    }
+
+    /// Returns the message with markdown syntax stripped for plain text display
+    var plainTextMessage: String? {
+        guard let message = message else { return nil }
+        guard isMarkdown else { return message }
+        return MarkdownStripper.strip(message)
+    }
+
+    /// Returns the title with markdown syntax stripped for plain text display
+    var plainTextTitle: String? {
+        guard let title = title else { return nil }
+        guard isMarkdown else { return title }
+        return MarkdownStripper.strip(title)
+    }
 
     struct NtfyAction: Codable {
         let action: String

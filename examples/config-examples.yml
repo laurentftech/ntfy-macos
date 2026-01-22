@@ -6,6 +6,10 @@ servers:
   # Home Automation (Home Assistant)
   # ===========================================
   - url: https://ntfy.sh
+    # Security: only allow homeassistant:// and https URLs
+    allowed_schemes:
+      - https
+      - homeassistant
     topics:
       - name: homeassistant-alerts
         icon_path: /Users/you/icons/homeassistant.png
