@@ -62,6 +62,51 @@ struct ServerConfig: Codable {
     let url: String
     let token: String?
     let topics: [TopicConfig]
+    let allowedSchemes: [String]?
+    let allowedDomains: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case url
+        case token
+        case topics
+        case allowedSchemes = "allowed_schemes"
+        case allowedDomains = "allowed_domains"
+    }
+
+    /// Returns the list of allowed URL schemes, defaulting to ["http", "https"]
+    var effectiveAllowedSchemes: [String] {
+        allowedSchemes ?? ["http", "https"]
+    }
+
+    /// Validates if a URL's scheme is allowed for this server
+    func isSchemeAllowed(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return effectiveAllowedSchemes.map { $0.lowercased() }.contains(scheme)
+    }
+
+    /// Validates if a URL's domain is allowed for this server (nil means all domains allowed, empty array means none allowed)
+    func isDomainAllowed(_ url: URL) -> Bool {
+        guard let allowedDomains = allowedDomains else {
+            return true  // No restriction if not configured (nil)
+        }
+        guard !allowedDomains.isEmpty else {
+            return false  // Empty array means no domains allowed
+        }
+        guard let host = url.host?.lowercased() else { return false }
+        return allowedDomains.map { $0.lowercased() }.contains { allowedDomain in
+            // Support wildcard subdomains: "*.example.com" matches "sub.example.com"
+            if allowedDomain.hasPrefix("*.") {
+                let baseDomain = String(allowedDomain.dropFirst(2))
+                return host == baseDomain || host.hasSuffix("." + baseDomain)
+            }
+            return host == allowedDomain
+        }
+    }
+
+    /// Validates if a URL is allowed (both scheme and domain)
+    func isUrlAllowed(_ url: URL) -> Bool {
+        return isSchemeAllowed(url) && isDomainAllowed(url)
+    }
 }
 
 struct AppConfig: Codable {
@@ -71,12 +116,20 @@ struct AppConfig: Codable {
     var allTopics: [TopicConfig] {
         servers.flatMap { $0.topics }
     }
+
+    /// Finds the server config that contains a given topic
+    func serverConfig(forTopic topicName: String) -> ServerConfig? {
+        return servers.first { server in
+            server.topics.contains { $0.name == topicName }
+        }
+    }
 }
 
 enum ConfigError: Error {
     case fileNotFound
     case invalidYAML(Error)
     case decodingError(Error)
+    case insecureFilePermissions(String)
 }
 
 final class ConfigManager: @unchecked Sendable {
@@ -107,6 +160,9 @@ final class ConfigManager: @unchecked Sendable {
             throw ConfigError.fileNotFound
         }
 
+        // Validate file permissions - should not be world-writable
+        try validateFilePermissions(at: configPath)
+
         let yamlString: String
         do {
             yamlString = try String(contentsOf: url, encoding: .utf8)
@@ -122,6 +178,28 @@ final class ConfigManager: @unchecked Sendable {
             self._config = decodedConfig
         } catch {
             throw ConfigError.decodingError(error)
+        }
+    }
+
+    /// Validates that the config file has secure permissions (not world-writable)
+    private func validateFilePermissions(at path: String) throws {
+        let fileManager = FileManager.default
+        let attributes = try fileManager.attributesOfItem(atPath: path)
+
+        guard let posixPermissions = attributes[.posixPermissions] as? Int else {
+            return  // Can't determine permissions, allow
+        }
+
+        // Check if world-writable (others have write permission: ----w--w-)
+        // POSIX permission bits: owner (rwx), group (rwx), others (rwx)
+        // World-writable means the last octet has write bit (0o002)
+        let worldWritable = (posixPermissions & 0o002) != 0
+
+        if worldWritable {
+            throw ConfigError.insecureFilePermissions(
+                "Config file at \(path) is world-writable (permissions: \(String(posixPermissions, radix: 8))). " +
+                "Please run: chmod o-w \"\(path)\""
+            )
         }
     }
 
