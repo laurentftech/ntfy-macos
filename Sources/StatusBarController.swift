@@ -6,12 +6,14 @@ class StatusBarController: NSObject {
     private var menu: NSMenu?
     private var statusMenuItem: NSMenuItem?
     private var serversSubmenu: NSMenu?
+    private var errorMenuItem: NSMenuItem?
     var onReloadConfig: (() -> Void)?
 
     // Connection tracking
     private var serverStatuses: [String: ServerConnectionStatus] = [:]
     private var connectingAnimationTimer: Timer?
     private var connectingAnimationVisible: Bool = true
+    private var currentConfigError: String?
 
     enum ConnectionState {
         case connecting    // Never connected yet (orange, flashing)
@@ -64,6 +66,12 @@ class StatusBarController: NSObject {
         statusMenuItem = NSMenuItem(title: "Connecting...", action: nil, keyEquivalent: "")
         statusMenuItem?.isEnabled = false
         menu?.addItem(statusMenuItem!)
+
+        // Error menu item (hidden by default)
+        errorMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        errorMenuItem?.isEnabled = false
+        errorMenuItem?.isHidden = true
+        menu?.addItem(errorMenuItem!)
 
         // Servers submenu showing individual server statuses
         let serversItem = NSMenuItem(title: "Servers", action: nil, keyEquivalent: "")
@@ -219,6 +227,44 @@ class StatusBarController: NSObject {
 
     func updateStatus(_ status: String) {
         statusMenuItem?.title = status
+    }
+
+    /// Shows a configuration error in the menu (in red)
+    func showConfigError(_ error: String) {
+        currentConfigError = error
+        errorMenuItem?.isHidden = false
+
+        // Create attributed string with red color
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.systemRed,
+            .font: NSFont.systemFont(ofSize: 13)
+        ]
+        let attributedTitle = NSAttributedString(string: "⚠️ Config Error", attributes: attributes)
+        errorMenuItem?.attributedTitle = attributedTitle
+        errorMenuItem?.toolTip = error
+    }
+
+    /// Shows a configuration warning in the menu (in orange)
+    func showConfigWarning(_ warning: String) {
+        currentConfigError = warning
+        errorMenuItem?.isHidden = false
+
+        // Create attributed string with orange color
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.systemOrange,
+            .font: NSFont.systemFont(ofSize: 13)
+        ]
+        let attributedTitle = NSAttributedString(string: "⚠️ Config Warning", attributes: attributes)
+        errorMenuItem?.attributedTitle = attributedTitle
+        errorMenuItem?.toolTip = warning
+    }
+
+    /// Clears any config error/warning from the menu
+    func clearConfigError() {
+        currentConfigError = nil
+        errorMenuItem?.isHidden = true
+        errorMenuItem?.attributedTitle = nil
+        errorMenuItem?.toolTip = nil
     }
 
     /// Initialize server tracking from config

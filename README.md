@@ -25,6 +25,7 @@ Receive push notifications on your Mac from any source — servers, IoT devices,
 - **Priority Mapping**: Maps ntfy priority levels to macOS interruption levels (critical, time-sensitive)
 - **Menu Bar App**: Runs in the menu bar with quick access to config and reload
 - **Live Config Reload**: Configuration changes are detected and applied automatically
+- **Config Validation**: Warns about unknown keys and typos in the menu bar
 - **Click to Open**: Click notifications to open in browser (configurable per topic)
 - **Automatic Permission Request**: Prompts for notification permission on first launch
 
@@ -117,6 +118,8 @@ ntfy-macos serve
 On first launch, the app will automatically request notification permission.
 
 The app runs in the menu bar with options to:
+- **Server Status**: Shows connection state for each server (green=connected, red=disconnected, orange flashing=connecting)
+- **Config Warning**: Displays warnings for unknown keys or typos (orange indicator)
 - **Edit Config**: Open config file in your default editor
 - **Show Config in Finder**: Reveal config directory
 - **Reload Config**: Apply configuration changes
@@ -171,8 +174,8 @@ servers:
 - `url` (required): Server URL (e.g., `https://ntfy.sh`)
 - `token` (optional): Authentication token (can also be stored in Keychain)
 - `topics` (required): List of topics to subscribe to
-- `allowed_schemes` (optional): List of URL schemes allowed for click/action URLs (default: `["http", "https"]`)
-- `allowed_domains` (optional): List of domains allowed for click/action URLs (supports wildcards like `*.example.com`)
+- `allowed_schemes` (optional): List of URL schemes allowed for click/action URLs (default: `["http", "https"]`). **Replaces defaults** — setting `[https, myapp]` blocks http; setting `[myapp]` blocks both http and https
+- `allowed_domains` (optional): List of domains allowed for click/action URLs (supports wildcards like `*.example.com`). Not set = all domains allowed
 
 #### Topic Fields
 
@@ -302,7 +305,10 @@ servers:
       - name: alerts
 ```
 
-**Note**: The config file is validated at startup — world-writable config files are rejected for security.
+**Config Validation**: The configuration is validated at startup and on reload:
+- World-writable config files are rejected for security
+- Unknown keys (typos, misplaced options) trigger a warning in the menu bar
+- Invalid YAML or missing required fields prevent the app from starting
 
 ## Priority Mapping
 
