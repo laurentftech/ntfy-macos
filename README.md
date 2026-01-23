@@ -87,16 +87,13 @@ servers:
     topics:
       - name: alerts
         icon_symbol: bell.fill
-        actions:
-          - title: Acknowledge
-            type: script
-            path: /usr/local/bin/ack-alert.sh
 
   - url: https://your-private-server.com
     token: tk_yourtoken
     topics:
       - name: deployments
-        icon_path: /Users/you/icons/deploy.png
+        icon_symbol: arrow.up.circle.fill
+        auto_run_script: ~/scripts/deploy-handler.sh
 ```
 
 3. **(Optional) Store Authentication Token in Keychain**
@@ -139,32 +136,32 @@ The configuration file is located at `~/.config/ntfy-macos/config.yml`:
 
 ```yaml
 servers:
-  # Public ntfy.sh server
+  # Public ntfy.sh server (no scripts for security)
   - url: https://ntfy.sh
-    # token: tk_optional  # Can also use Keychain
     topics:
       - name: alerts
         icon_symbol: bell.fill
         actions:
-          - title: Acknowledge
-            type: script
-            path: /usr/local/bin/ack-alert.sh
           - title: Open Dashboard
             type: view
             url: "https://dashboard.example.com"
 
-      - name: deployments
-        icon_path: /Users/you/icons/deploy.png
-        auto_run_script: /usr/local/bin/deploy-handler.sh
-
-  # Private server
+  # Private server (scripts are safe here)
   - url: https://your-private-server.com
     token: tk_yourtoken
     topics:
+      - name: deployments
+        icon_symbol: arrow.up.circle.fill
+        auto_run_script: ~/scripts/deploy-handler.sh
+        actions:
+          - title: Rollback
+            type: script
+            path: ~/scripts/rollback.sh
+
       - name: monitoring
         icon_symbol: server.rack
         silent: true
-        auto_run_script: /usr/local/bin/monitor-handler.sh
+        auto_run_script: ~/scripts/monitor-handler.sh
 ```
 
 ### Configuration Options
@@ -441,11 +438,12 @@ servers:
 
 ```yaml
 servers:
-  - url: https://ntfy.sh
+  - url: https://your-private-server.com
+    token: tk_yourtoken
     topics:
       - name: background-jobs
         silent: true
-        auto_run_script: /usr/local/bin/process-job.sh
+        auto_run_script: ~/scripts/process-job.sh
 ```
 
 ### Custom Click URL (GitHub Releases)
@@ -457,7 +455,6 @@ servers:
       - name: yt-dlp-releases
         icon_symbol: arrow.down.circle.fill
         click_url: https://github.com/yt-dlp/yt-dlp/releases
-        auto_run_script: /usr/local/bin/update-yt-dlp.sh
 ```
 
 ### Restricted URL Security
