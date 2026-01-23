@@ -353,6 +353,14 @@ This displays as: **⚠️🔥 Alert**
 
 Common tags: `warning` (⚠️), `fire` (🔥), `+1` (👍), `skull` (💀), `bell` (🔔), `rocket` (🚀), `check` (✅), etc.
 
+## FAQ
+
+### Why don't notifications appear?
+
+- **Focus Mode**: Check if Focus/Do Not Disturb is enabled (only priority 5 notifications bypass Focus)
+- **Permissions**: Go to System Settings → Notifications → ntfy-macos and ensure notifications are allowed
+- **Background execution**: If launched via `brew services`, ensure the app has permission to run in the background
+
 ## Troubleshooting
 
 ### Notifications Not Appearing
