@@ -147,6 +147,12 @@ class StatusBarController: NSObject {
         alert.runModal()
     }
 
+    @objc func openServerURL(_ sender: NSMenuItem) {
+        guard let urlString = sender.representedObject as? String,
+              let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     @objc func showAbout() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 200),
@@ -415,8 +421,9 @@ class StatusBarController: NSObject {
             let topicsText = status.topics.joined(separator: ", ")
 
             // Create attributed string with colored status indicator
-            let serverItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-            serverItem.isEnabled = false
+            let serverItem = NSMenuItem(title: "", action: #selector(openServerURL(_:)), keyEquivalent: "")
+            serverItem.target = self
+            serverItem.representedObject = status.url
 
             let attributedTitle = NSMutableAttributedString()
 
