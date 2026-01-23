@@ -2,19 +2,18 @@ import Foundation
 import UserNotifications
 import AppKit
 
-/// App constants - used when running via symlink where Bundle.main.bundleIdentifier is nil
+/// App constants
 enum AppConstants {
     static let bundleIdentifier = "com.laurentftech.ntfy-macos"
-    static let version = "0.1.6"
 
     /// Returns the bundle identifier, falling back to hardcoded value if running via symlink
     static var effectiveBundleIdentifier: String {
         Bundle.main.bundleIdentifier ?? bundleIdentifier
     }
 
-    /// Returns the app version from bundle or falls back to hardcoded value
+    /// Returns the app version from Info.plist
     static var effectiveVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? version
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
     }
 }
 
