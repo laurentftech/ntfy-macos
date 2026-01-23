@@ -1,5 +1,8 @@
 # ntfy-macos Configuration Examples
 # Copy relevant sections to ~/.config/ntfy-macos/config.yml
+#
+# Note: Unknown keys in your config will trigger a warning in the menu bar.
+# This helps catch typos like "icon_path" vs "iconpath" or misplaced options.
 
 servers:
   # ===========================================
@@ -7,6 +10,7 @@ servers:
   # ===========================================
   - url: https://ntfy.sh
     # Security: only allow homeassistant:// and https URLs
+    # Note: allowed_schemes REPLACES defaults - http is blocked here
     allowed_schemes:
       - https
       - homeassistant
@@ -24,7 +28,10 @@ servers:
   # ===========================================
   # CI/CD Pipeline Notifications
   # ===========================================
-  - url: https://ntfy.sh
+  # IMPORTANT: Use a private server with authentication for script actions
+  # Never use auto_run_script or script actions with public ntfy.sh
+  - url: https://ntfy.yourcompany.com
+    token: tk_cicd_token
     topics:
       - name: github-actions
         icon_symbol: hammer.fill
@@ -83,9 +90,26 @@ servers:
             url: "https://nas.local:5001/webman/index.cgi?launchApp=SYNO.SDS.DownloadStation.Application"
 
   # ===========================================
-  # Package Updates (yt-dlp, Homebrew, etc.)
+  # Package Updates (view only - safe for public server)
   # ===========================================
   - url: https://ntfy.sh
+    topics:
+      - name: yt-dlp-releases
+        icon_symbol: arrow.down.circle.fill
+        click_url: "https://github.com/yt-dlp/yt-dlp/releases"
+
+      - name: homebrew-updates
+        icon_symbol: mug.fill
+        actions:
+          - title: "View Changelog"
+            type: view
+            url: "https://github.com/Homebrew/brew/releases"
+
+  # ===========================================
+  # Package Updates (with auto-update scripts - private server)
+  # ===========================================
+  - url: https://ntfy.home.local
+    token: tk_updates_token
     topics:
       - name: yt-dlp-releases
         icon_symbol: arrow.down.circle.fill
@@ -94,15 +118,12 @@ servers:
       - name: homebrew-updates
         icon_symbol: mug.fill
         auto_run_script: /usr/local/bin/brew-upgrade.sh
-        actions:
-          - title: "View Changelog"
-            type: view
-            url: "https://github.com/Homebrew/brew/releases"
 
   # ===========================================
-  # Security Alerts
+  # Security Alerts (private server required for scripts)
   # ===========================================
-  - url: https://ntfy.sh
+  - url: https://ntfy.secure.local
+    token: tk_security_token
     topics:
       - name: security-alerts
         icon_symbol: lock.shield.fill
@@ -115,9 +136,10 @@ servers:
             path: /usr/local/bin/block-ip.sh
 
   # ===========================================
-  # Background Processing (Silent)
+  # Background Processing (Silent) - private server required
   # ===========================================
-  - url: https://ntfy.sh
+  - url: https://ntfy.home.local
+    token: tk_automation_token
     topics:
       - name: backup-trigger
         silent: true
@@ -128,9 +150,10 @@ servers:
         auto_run_script: /usr/local/bin/sync-files.sh
 
   # ===========================================
-  # Smart Home Devices
+  # Smart Home Devices (private server for script actions)
   # ===========================================
-  - url: https://ntfy.sh
+  - url: https://ntfy.home.local
+    token: tk_smarthome_token
     topics:
       - name: doorbell
         icon_symbol: video.doorbell.fill
@@ -150,9 +173,10 @@ servers:
             path: /usr/local/bin/garage-toggle.sh
 
   # ===========================================
-  # Development Tools
+  # Development Tools (private server for script actions)
   # ===========================================
-  - url: https://ntfy.sh
+  - url: https://ntfy.dev.local
+    token: tk_dev_token
     topics:
       - name: build-complete
         icon_symbol: checkmark.circle.fill
@@ -170,3 +194,30 @@ servers:
           - title: "Open PR"
             type: view
             url: "https://github.com/pulls"
+
+  # ===========================================
+  # URL Security (allowed_schemes & allowed_domains)
+  # ===========================================
+  # Restrict which URLs can be opened from notifications
+  - url: https://ntfy.sh
+    # Only allow https URLs to specific domains
+    allowed_schemes:
+      - https
+    allowed_domains:
+      - github.com
+      - "*.example.com"  # Wildcards supported
+    topics:
+      - name: restricted-alerts
+        icon_symbol: lock.fill
+        click_url: "https://github.com/myorg/myrepo"
+
+  # Allow custom app schemes (e.g., Home Assistant)
+  - url: https://ntfy.home.local
+    allowed_schemes:
+      - https
+      - homeassistant
+      - ssh  # Allow ssh:// URLs
+    topics:
+      - name: home-automation
+        icon_symbol: house.fill
+        click_url: "homeassistant://"

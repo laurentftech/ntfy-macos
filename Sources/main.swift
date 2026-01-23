@@ -173,8 +173,21 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         // Reload config file
         do {
             try ConfigManager.shared.loadConfig(from: nil)
+            DispatchQueue.main.async {
+                // Check for config warnings (unknown keys, etc.)
+                if let warning = ConfigManager.shared.configWarning {
+                    Log.info("Configuration warning: \(warning)")
+                    StatusBarController.shared.showConfigWarning(warning)
+                } else {
+                    StatusBarController.shared.clearConfigError()
+                }
+            }
         } catch {
             Log.error("Failed to reload configuration: \(error)")
+            let errorMessage = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            DispatchQueue.main.async {
+                StatusBarController.shared.showConfigError(errorMessage)
+            }
             return
         }
 
@@ -545,6 +558,12 @@ DispatchQueue.main.async {
         StatusBarController.shared.setup()
         StatusBarController.shared.onReloadConfig = {
             CLI.ntfyAppInstance?.reloadConfig()
+        }
+
+        // Show any initial config warnings
+        if let warning = ConfigManager.shared.configWarning {
+            Log.info("Configuration warning: \(warning)")
+            StatusBarController.shared.showConfigWarning(warning)
         }
     }
 }

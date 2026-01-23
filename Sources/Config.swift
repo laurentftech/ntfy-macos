@@ -125,11 +125,27 @@ struct AppConfig: Codable {
     }
 }
 
-enum ConfigError: Error {
+enum ConfigError: Error, LocalizedError {
     case fileNotFound
     case invalidYAML(Error)
     case decodingError(Error)
     case insecureFilePermissions(String)
+    case unknownKeys(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .fileNotFound:
+            return "Configuration file not found"
+        case .invalidYAML(let error):
+            return "Invalid YAML: \(error.localizedDescription)"
+        case .decodingError(let error):
+            return "Configuration error: \(error.localizedDescription)"
+        case .insecureFilePermissions(let message):
+            return message
+        case .unknownKeys(let details):
+            return "Unknown configuration keys:\n\(details)"
+        }
+    }
 }
 
 final class ConfigManager: @unchecked Sendable {
@@ -170,15 +186,91 @@ final class ConfigManager: @unchecked Sendable {
             throw ConfigError.fileNotFound
         }
 
+        // Validate for unknown keys before decoding (warnings only, doesn't block loading)
+        let unknownKeysWarning = checkForUnknownKeys(in: yamlString)
+
         let decoder = YAMLDecoder()
         do {
             let decodedConfig = try decoder.decode(AppConfig.self, from: yamlString)
             lock.lock()
             defer { lock.unlock() }
             self._config = decodedConfig
+            self._configWarning = unknownKeysWarning
         } catch {
             throw ConfigError.decodingError(error)
         }
+    }
+
+    /// Warning message for unknown keys (doesn't prevent loading)
+    private var _configWarning: String?
+    var configWarning: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _configWarning
+    }
+
+    /// Known keys at each level of the config
+    private static let knownRootKeys: Set<String> = ["servers"]
+    private static let knownServerKeys: Set<String> = ["url", "token", "topics", "allowed_schemes", "allowed_domains"]
+    private static let knownTopicKeys: Set<String> = ["name", "icon_path", "icon_symbol", "auto_run_script", "silent", "click_url", "actions"]
+    private static let knownActionKeys: Set<String> = ["title", "type", "path", "url"]
+
+    /// Checks YAML for unknown keys that would be silently ignored
+    /// Returns warning message if unknown keys found, nil otherwise
+    private func checkForUnknownKeys(in yamlString: String) -> String? {
+        guard let yaml = try? Yams.load(yaml: yamlString) as? [String: Any] else {
+            return nil  // Let the decoder handle invalid YAML
+        }
+
+        var warnings: [String] = []
+
+        // Check root level
+        for key in yaml.keys {
+            if !Self.knownRootKeys.contains(key) {
+                warnings.append("Unknown key '\(key)' at root level")
+            }
+        }
+
+        // Check servers
+        if let servers = yaml["servers"] as? [[String: Any]] {
+            for (serverIndex, server) in servers.enumerated() {
+                let serverUrl = server["url"] as? String ?? "server[\(serverIndex)]"
+                for key in server.keys {
+                    if !Self.knownServerKeys.contains(key) {
+                        warnings.append("Unknown key '\(key)' in server '\(serverUrl)'")
+                    }
+                }
+
+                // Check topics
+                if let topics = server["topics"] as? [[String: Any]] {
+                    for (topicIndex, topic) in topics.enumerated() {
+                        let topicName = topic["name"] as? String ?? "topic[\(topicIndex)]"
+                        for key in topic.keys {
+                            if !Self.knownTopicKeys.contains(key) {
+                                warnings.append("Unknown key '\(key)' in topic '\(topicName)' (server: \(serverUrl))")
+                            }
+                        }
+
+                        // Check actions
+                        if let actions = topic["actions"] as? [[String: Any]] {
+                            for (actionIndex, action) in actions.enumerated() {
+                                let actionTitle = action["title"] as? String ?? "action[\(actionIndex)]"
+                                for key in action.keys {
+                                    if !Self.knownActionKeys.contains(key) {
+                                        warnings.append("Unknown key '\(key)' in action '\(actionTitle)' (topic: \(topicName))")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if warnings.isEmpty {
+            return nil
+        }
+        return warnings.joined(separator: "\n")
     }
 
     /// Validates that the config file has secure permissions (not world-writable)
