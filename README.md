@@ -361,6 +361,14 @@ Common tags: `warning` (⚠️), `fire` (🔥), `+1` (👍), `skull` (💀), `be
 - **Permissions**: Go to System Settings → Notifications → ntfy-macos and ensure notifications are allowed
 - **Background execution**: If launched via `brew services`, ensure the app has permission to run in the background
 
+### Permission dialog doesn't work after update
+
+After a Homebrew update, macOS may prompt for notification permission again. The permission dialog can be unreliable when the app runs as a background service. If clicking "Allow" doesn't work:
+
+1. Stop the service: `brew services stop ntfy-macos`
+2. Grant permission manually: System Settings → Notifications → ntfy-macos → Allow Notifications
+3. Restart the service: `brew services start ntfy-macos`
+
 ## Troubleshooting
 
 ### Notifications Not Appearing
