@@ -16,6 +16,7 @@ struct TopicConfig: Codable {
     let silent: Bool?
     let clickUrl: ClickUrlConfig?  // Control click behavior: true/false/custom URL
     let actions: [NotificationAction]?
+    let fetchMissed: Bool?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -25,6 +26,12 @@ struct TopicConfig: Codable {
         case silent
         case clickUrl = "click_url"
         case actions
+        case fetchMissed = "fetch_missed"
+    }
+
+    /// Whether to fetch missed messages for this topic (default: false)
+    var shouldFetchMissed: Bool {
+        fetchMissed ?? false
     }
 }
 
@@ -219,7 +226,7 @@ final class ConfigManager: @unchecked Sendable {
     /// Known keys at each level of the config
     private static let knownRootKeys: Set<String> = ["servers"]
     private static let knownServerKeys: Set<String> = ["url", "token", "topics", "allowed_schemes", "allowed_domains", "fetch_missed"]
-    private static let knownTopicKeys: Set<String> = ["name", "icon_path", "icon_symbol", "auto_run_script", "silent", "click_url", "actions"]
+    private static let knownTopicKeys: Set<String> = ["name", "icon_path", "icon_symbol", "auto_run_script", "silent", "click_url", "actions", "fetch_missed"]
     private static let knownActionKeys: Set<String> = ["title", "type", "path", "url"]
 
     /// Checks YAML for unknown keys that would be silently ignored

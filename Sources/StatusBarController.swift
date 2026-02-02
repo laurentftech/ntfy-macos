@@ -7,6 +7,7 @@ class StatusBarController: NSObject {
     private var statusMenuItem: NSMenuItem?
     private var serversSubmenu: NSMenu?
     private var errorMenuItem: NSMenuItem?
+    private var aboutWindow: NSWindow?
     var onReloadConfig: (() -> Void)?
 
     // Connection tracking
@@ -154,6 +155,13 @@ class StatusBarController: NSObject {
     }
 
     @objc func showAbout() {
+        // Reuse existing window if already open
+        if let existingWindow = aboutWindow, existingWindow.isVisible {
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 340, height: 200),
             styleMask: [.titled, .closable],
@@ -162,6 +170,7 @@ class StatusBarController: NSObject {
         )
         window.title = "About ntfy-macos"
         window.center()
+        window.isReleasedWhenClosed = false  // Keep window object alive after closing
 
         let contentView = NSView(frame: window.contentView!.bounds)
 
@@ -227,6 +236,7 @@ class StatusBarController: NSObject {
         contentView.addSubview(licenseLabel)
 
         window.contentView = contentView
+        aboutWindow = window  // Store reference to prevent deallocation
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
