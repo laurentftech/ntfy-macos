@@ -137,26 +137,50 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             StatusBarController.shared.initializeServers(servers: serverInfos)
         }
 
-        // Create a client for each server
+        // Create clients for each server, grouping topics by fetch_missed setting
         for serverConfig in config.servers {
-            let topicNames = serverConfig.topics.map { $0.name }
-            guard !topicNames.isEmpty else { continue }
-
-            Log.info("Creating client for \(serverConfig.url)...")
+            guard !serverConfig.topics.isEmpty else { continue }
 
             let authToken = ConfigManager.shared.getAuthToken(forServer: serverConfig.url)
-            let client = NtfyClient(
-                serverURL: serverConfig.url,
-                topics: topicNames,
-                authToken: authToken,
-                fetchMissed: serverConfig.shouldFetchMissed
-            )
-            client.delegate = self
-            self.clients.append(client)
-            self.clientToServer[ObjectIdentifier(client)] = serverConfig.url
 
-            Log.info("Connecting to \(serverConfig.url)...")
-            client.connect()
+            // Group topics by their fetch_missed setting (topic-level overrides server-level)
+            let topicsWithFetchMissed = serverConfig.topics.filter { topic in
+                topic.fetchMissed ?? serverConfig.shouldFetchMissed
+            }.map { $0.name }
+
+            let topicsWithoutFetchMissed = serverConfig.topics.filter { topic in
+                !(topic.fetchMissed ?? serverConfig.shouldFetchMissed)
+            }.map { $0.name }
+
+            // Create client for topics that need fetch_missed
+            if !topicsWithFetchMissed.isEmpty {
+                Log.info("Creating client for \(serverConfig.url) (fetch_missed: true, topics: \(topicsWithFetchMissed.joined(separator: ", ")))...")
+                let client = NtfyClient(
+                    serverURL: serverConfig.url,
+                    topics: topicsWithFetchMissed,
+                    authToken: authToken,
+                    fetchMissed: true
+                )
+                client.delegate = self
+                self.clients.append(client)
+                self.clientToServer[ObjectIdentifier(client)] = serverConfig.url
+                client.connect()
+            }
+
+            // Create client for topics that don't need fetch_missed
+            if !topicsWithoutFetchMissed.isEmpty {
+                Log.info("Creating client for \(serverConfig.url) (fetch_missed: false, topics: \(topicsWithoutFetchMissed.joined(separator: ", ")))...")
+                let client = NtfyClient(
+                    serverURL: serverConfig.url,
+                    topics: topicsWithoutFetchMissed,
+                    authToken: authToken,
+                    fetchMissed: false
+                )
+                client.delegate = self
+                self.clients.append(client)
+                self.clientToServer[ObjectIdentifier(client)] = serverConfig.url
+                client.connect()
+            }
         }
     }
 
