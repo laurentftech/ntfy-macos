@@ -67,6 +67,7 @@ struct NtfyMessage: Codable {
 final class NtfyClient: NSObject, @unchecked Sendable {
     private let serverURL: String
     private let topics: [String]
+    private let fetchMissed: Bool
     private let lock = NSLock()
     private var _authToken: String?
 
@@ -99,10 +100,11 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private var shouldReconnect = true
     private var retryAfterDelay: TimeInterval?  // From Retry-After header
 
-    init(serverURL: String, topics: [String], authToken: String? = nil) {
+    init(serverURL: String, topics: [String], authToken: String? = nil, fetchMissed: Bool = false) {
         self.serverURL = serverURL
         self.topics = topics
         self._authToken = authToken
+        self.fetchMissed = fetchMissed
 
         // Create a dedicated serial queue for URLSession callbacks
         self.delegateQueue = OperationQueue()
@@ -141,6 +143,11 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         }
 
         components.path = "/\(topicsString)/json"
+
+        // Add since=all to fetch missed messages when enabled
+        if fetchMissed {
+            components.queryItems = [URLQueryItem(name: "since", value: "all")]
+        }
 
         guard let url = components.url else {
             isConnecting = false

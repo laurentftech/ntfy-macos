@@ -171,6 +171,7 @@ servers:
 - `url` (required): Server URL (e.g., `https://ntfy.sh`)
 - `token` (optional): Authentication token (can also be stored in Keychain)
 - `topics` (required): List of topics to subscribe to
+- `fetch_missed` (optional): If `true`, fetch cached messages on (re)connect (default: `false`). Useful to receive notifications that arrived while the Mac was off
 - `allowed_schemes` (optional): List of URL schemes allowed for click/action URLs (default: `["http", "https"]`). **Replaces defaults** — setting `[https, myapp]` blocks http; setting `[myapp]` blocks both http and https
 - `allowed_domains` (optional): List of domains allowed for click/action URLs (supports wildcards like `*.example.com`). Not set = all domains allowed
 

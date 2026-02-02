@@ -148,7 +148,8 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             let client = NtfyClient(
                 serverURL: serverConfig.url,
                 topics: topicNames,
-                authToken: authToken
+                authToken: authToken,
+                fetchMissed: serverConfig.shouldFetchMissed
             )
             client.delegate = self
             self.clients.append(client)
