@@ -132,11 +132,14 @@ sudo ln -sf /usr/local/opt/ntfy-macos/ntfy-macos.app /Applications/
 
 ## Configuration
 
-The configuration file is located at `~/.config/ntfy-macos/config.yml`:
+The configuration file is located at `~/.config/ntfy-macos/config.yml`.
+
+For a complete list of all configuration options and detailed examples, please see the [config-examples.yml](examples/config-examples.yml) file.
+
+### Basic Structure
 
 ```yaml
 servers:
-  # Public ntfy.sh server (no scripts for security)
   - url: https://ntfy.sh
     topics:
       - name: alerts
@@ -146,56 +149,51 @@ servers:
             type: view
             url: "https://dashboard.example.com"
 
-  # Private server (scripts are safe here)
   - url: https://your-private-server.com
     token: tk_yourtoken
     topics:
       - name: deployments
         icon_symbol: arrow.up.circle.fill
         auto_run_script: ~/scripts/deploy-handler.sh
-        actions:
-          - title: Rollback
-            type: script
-            path: ~/scripts/rollback.sh
-
-      - name: monitoring
-        icon_symbol: server.rack
-        silent: true
-        auto_run_script: ~/scripts/monitor-handler.sh
 ```
 
 ### Configuration Options
 
 #### Server Fields
 
-- `url` (required): Server URL (e.g., `https://ntfy.sh`)
-- `token` (optional): Authentication token (can also be stored in Keychain)
-- `topics` (required): List of topics to subscribe to
-- `fetch_missed` (optional): If `true`, fetch cached messages on (re)connect (default: `false`). Useful to receive notifications that arrived while the Mac was off
-- `allowed_schemes` (optional): List of URL schemes allowed for click/action URLs (default: `["http", "https"]`). **Replaces defaults** — setting `[https, myapp]` blocks http; setting `[myapp]` blocks both http and https
-- `allowed_domains` (optional): List of domains allowed for click/action URLs (supports wildcards like `*.example.com`). Not set = all domains allowed
+- `url` (required): Server URL
+- `token` (optional): Authentication token
+- `topics` (required): List of topics
 
 #### Topic Fields
 
-- `name` (required): Topic name to subscribe to
-- `icon_symbol` (optional): SF Symbol name (e.g., `bell.fill`, `server.rack`)
-- `icon_path` (optional): Absolute path to local image file (.png, .jpg)
-- `auto_run_script` (optional): Script to execute automatically when message arrives
-- `silent` (optional): If `true`, skip notification banner (useful for background automation)
-- `click_url` (optional): Control what happens when clicking the notification:
-  - Not set or `true`: Opens `{server_url}/{topic}` in browser
-  - `false`: Disables click action
-  - `"https://..."`: Opens custom URL
+- `name` (required): Topic name
+- `icon_symbol` (optional): SF Symbol name
+- `icon_path` (optional): Path to a local image file
+- `auto_run_script` (optional): Script to execute on every message
+- `silent` (optional): If `true`, skip notification banner
+- `click_url` (optional): Custom URL to open on click
 - `actions` (optional): List of interactive buttons
 
 #### Action Fields
 
 - `title` (required): Button label
-- `type` (required): `script` or `view`
-- `path` (required for script): Absolute path to script file
-- `url` (required for view): URL to open when clicked
+- `type` (required): `script` or `view`.
+- `path` (required for `script` type): Absolute path to the script file.
+- `url` (required for `view` type): URL to open.
 
-**Note**: Config-defined actions override any [actions](https://docs.ntfy.sh/publish/#action-buttons) sent with the ntfy message. This lets you define your own local scripts/URLs that always appear, regardless of what the message sender specified. Message actions are only used when no config actions are defined for the topic.
+**Note**: Config-defined actions ALWAYS override any actions sent with the ntfy message.
+
+Here’s a summary of how actions are handled:
+
+| Action / Feature    | Defined in `config.yml` | Sent in Message Payload |
+|---------------------|:-----------------------:|:-----------------------:|
+| `view` action       | ✅ Supported            | ✅ Supported            |
+| `script` action     | ✅ Supported            | ❌ Ignored (Security)   |
+| `auto_run_script`   | ✅ Supported            | N/A (Security)          |
+| `http` action       | ❌ Not supported        | ✅ Supported            |
+| `applescript` action| ❌ Not supported        | ✅ Supported            |
+| `shortcut` action   | ❌ Not supported        | ✅ Supported            |
 
 ## CLI Commands
 
@@ -280,33 +278,11 @@ Scripts are **only executed if explicitly configured** in your local `config.yml
 
 **Best practices:**
 - Only configure scripts that you trust and have reviewed
-- Use absolute paths to scripts (e.g., `/usr/local/bin/myscript.sh`)
-- For public topics, avoid `auto_run_script` — use interactive action buttons instead, so you can review notifications before triggering scripts
+- Use absolute paths to scripts
+- For public topics, avoid `auto_run_script`
 - Keep your configuration file secure (`chmod 600 ~/.config/ntfy-macos/config.yml`)
 - For sensitive automation, use a self-hosted ntfy server with authentication
-- Use `allowed_schemes` and `allowed_domains` to restrict which URLs can be opened from notifications
-
-**URL Security**: By default, only `http` and `https` URLs can be opened from notifications. You can customize this per-server:
-
-```yaml
-servers:
-  - url: https://ntfy.sh
-    # Only allow https and your custom app scheme
-    allowed_schemes:
-      - https
-      - myapp
-    # Only allow URLs from these domains
-    allowed_domains:
-      - example.com
-      - "*.trusted.org"  # Wildcards supported
-    topics:
-      - name: alerts
-```
-
-**Config Validation**: The configuration is validated at startup and on reload:
-- World-writable config files are rejected for security
-- Unknown keys (typos, misplaced options) trigger a warning in the menu bar
-- Invalid YAML or missing required fields prevent the app from starting
+- Use `allowed_schemes` and `allowed_domains` to restrict which URLs can be opened.
 
 ## Priority Mapping
 
@@ -318,53 +294,29 @@ ntfy priority levels map to macOS interruption levels:
 
 ## SF Symbols
 
-You can use any SF Symbol name for icons. Common examples:
-
-- `bell.fill` - Bell icon
-- `server.rack` - Server icon
-- `exclamationmark.triangle.fill` - Warning icon
-- `checkmark.circle.fill` - Success icon
-- `envelope.fill` - Mail icon
-- `gear` - Settings icon
-
-Browse all symbols using the SF Symbols app (free from Apple).
+You can use any SF Symbol name for icons. Browse all symbols using the SF Symbols app (free from Apple).
 
 ## Markdown Messages
 
-ntfy supports [markdown formatting](https://docs.ntfy.sh/publish/#markdown-formatting) when you set the `X-Markdown` header or `Content-Type: text/markdown`. However, **macOS native notifications only support plain text** — they cannot render formatted markdown.
-
-ntfy-macos automatically strips markdown syntax from messages for cleaner display:
-- `**bold**` → bold
-- `[link](url)` → link
-- `` `code` `` → code
-- Headers, lists, blockquotes → plain text
-
-To view the fully formatted message, click the notification to open it in the ntfy web interface.
+macOS native notifications only support plain text and cannot render formatted markdown. ntfy-macos automatically strips markdown syntax from messages for cleaner display.
 
 ## Emoji Tags
 
-ntfy supports [emoji shortcodes](https://docs.ntfy.sh/emojis/) in the `Tags` field. When you send a message with tags like `warning` or `fire`, ntfy-macos automatically converts them to emojis and prepends them to the notification title.
+ntfy supports [emoji shortcodes](https://docs.ntfy.sh/emojis/) in the `Tags` field. These are automatically converted to emojis and prepended to the notification title.
 
-Example using curl:
-```bash
-curl -H "Tags: warning,fire" -H "Title: Alert" -d "Server is down" https://ntfy.sh/mytopic
-```
-
-This displays as: **⚠️🔥 Alert**
-
-Common tags: `warning` (⚠️), `fire` (🔥), `+1` (👍), `skull` (💀), `bell` (🔔), `rocket` (🚀), `check` (✅), etc.
+Example: `Tags: warning,fire` → **⚠️🔥 Alert**
 
 ## FAQ
 
 ### Why don't notifications appear?
 
-- **Focus Mode**: Check if Focus/Do Not Disturb is enabled (only priority 5 notifications bypass Focus)
-- **Permissions**: Go to System Settings → Notifications → ntfy-macos and ensure notifications are allowed
-- **Background execution**: If launched via `brew services`, ensure the app has permission to run in the background
+- **Focus Mode**: Check if Focus/Do Not Disturb is enabled.
+- **Permissions**: Go to System Settings → Notifications → ntfy-macos and ensure notifications are allowed.
+- **Background execution**: If launched via `brew services`, ensure the app has permission to run in the background.
 
 ### Permission dialog doesn't respond to clicks
 
-The permission dialog can occasionally be unresponsive when the app runs as a background service. If clicking "Allow" doesn't work:
+If the permission dialog is unresponsive:
 
 1. Stop the service: `brew services stop ntfy-macos`
 2. Grant permission manually: System Settings → Notifications → ntfy-macos → Allow Notifications
@@ -372,123 +324,10 @@ The permission dialog can occasionally be unresponsive when the app runs as a ba
 
 ## Troubleshooting
 
-### Notifications Not Appearing
-
-1. Check notification permissions:
-   - System Settings → Notifications → ntfy-macos
-   - Ensure notifications are enabled
-
-2. Test notifications:
-   ```bash
-   ntfy-macos test-notify --topic test
-   ```
-
-### Connection Issues
-
-- Verify server URL in configuration
-- Check authentication token
-- Review logs:
-  ```bash
-  # View logs (same location for manual and brew services)
-  cat ~/.local/share/ntfy-macos/logs/ntfy-macos.log
-
-  # Or follow in real-time
-  tail -f ~/.local/share/ntfy-macos/logs/ntfy-macos.log
-  ```
-
-### Script Not Executing
-
-1. Verify script is executable:
-   ```bash
-   chmod +x /path/to/script.sh
-   ```
-
-2. Test script manually:
-   ```bash
-   /bin/sh /path/to/script.sh "test message"
-   ```
-
-3. Check script output in service logs
-
-## Examples
-
-### Multi-Server Setup
-
-```yaml
-servers:
-  # Public ntfy.sh
-  - url: https://ntfy.sh
-    topics:
-      - name: public-alerts
-        icon_symbol: bell.fill
-
-  # Self-hosted server
-  - url: https://ntfy.mycompany.com
-    token: tk_secret
-    topics:
-      - name: deployments
-        icon_symbol: arrow.up.circle.fill
-        actions:
-          - title: View Status
-            type: view
-            url: "https://ci.mycompany.com"
-          - title: Rollback
-            type: script
-            path: /usr/local/bin/rollback.sh
-```
-
-### Home Automation
-
-```yaml
-servers:
-  - url: https://ntfy.home.local
-    topics:
-      - name: homeassistant
-        icon_path: /Users/you/icons/ha.png
-        actions:
-          - title: Open Home Assistant
-            type: view
-            url: "homeassistant://"
-```
-
-### Silent Background Processing
-
-```yaml
-servers:
-  - url: https://your-private-server.com
-    token: tk_yourtoken
-    topics:
-      - name: background-jobs
-        silent: true
-        auto_run_script: ~/scripts/process-job.sh
-```
-
-### Custom Click URL (GitHub Releases)
-
-```yaml
-servers:
-  - url: https://ntfy.sh
-    topics:
-      - name: yt-dlp-releases
-        icon_symbol: arrow.down.circle.fill
-        click_url: https://github.com/yt-dlp/yt-dlp/releases
-```
-
-### Restricted URL Security
-
-```yaml
-servers:
-  - url: https://ntfy.sh
-    # Only allow https URLs to specific domains
-    allowed_schemes:
-      - https
-    allowed_domains:
-      - github.com
-      - "*.example.com"
-    topics:
-      - name: releases
-        icon_symbol: arrow.down.circle.fill
-```
+- **Logs**: `~/.local/share/ntfy-macos/logs/ntfy-macos.log`
+- **Test Notifications**: `ntfy-macos test-notify --topic test`
+- **Connection Issues**: Verify server URL and token.
+- **Script Not Executing**: Ensure the script is executable (`chmod +x`).
 
 ## Architecture
 
@@ -509,11 +348,11 @@ MIT License
 
 ## Credits
 
-This project is a third-party client for [ntfy](https://ntfy.sh), created by [Philipp C. Heckel](https://github.com/binwiederhier). ntfy is a simple, open-source pub-sub notification service that makes it easy to send push notifications to your devices.
+This project is a third-party client for [ntfy](https://ntfy.sh), created by [Philipp C. Heckel](https://github.com/binwiederhier).
 
 ## Related Projects
 
-- [ntfy](https://ntfy.sh) - Simple pub-sub notification service by Philipp C. Heckel
+- [ntfy](https://ntfy.sh) - Simple pub-sub notification service
 - [ntfy-android](https://github.com/binwiederhier/ntfy-android) - Official Android app
 - [ntfy-ios](https://github.com/binwiederhier/ntfy-ios) - Official iOS app
 
