@@ -186,14 +186,18 @@ servers:
 
 Here’s a summary of how actions are handled:
 
-| Action / Feature    | Defined in `config.yml` | Sent in Message Payload |
-|---------------------|:-----------------------:|:-----------------------:|
-| `view` action       | ✅ Supported            | ✅ Supported            |
-| `script` action     | ✅ Supported            | ❌ Ignored (Security)   |
-| `auto_run_script`   | ✅ Supported            | N/A (Security)          |
-| `http` action       | ❌ Not supported        | ✅ Supported            |
-| `applescript` action| ❌ Not supported        | ✅ Supported            |
-| `shortcut` action   | ❌ Not supported        | ✅ Supported            |
+| Action type | ntfy protocol | ntfy-macos (payload)    | ntfy-macos (config.yml)     |
+| ----------- | ------------- | ----------------------- | --------------------------- |
+| view        | ✅ Standard    | ✅ Supported             | ✅ Supported                 |
+| http        | ✅ Standard    | ✅ Supported             | ❌ Not supported (by design) |
+| broadcast   | ✅ Standard    | ✅ Supported             | ❌ Not supported (by design)                          |
+| dismiss     | ✅ Standard    | ✅ Supported             | ❌ Not supported (by design)                          |
+| script      | ❌             | ❌ Blocked               | ✅ Supported                 |
+| applescript | ❌             | ✅ Supported (extension) | 🟡 Planned (user-triggered only)                           |
+| shortcut    | ❌             | ✅ Supported (extension) | 🟡 Planned (user-triggered only)                           |
+
+**Note**: Some action types (applescript, shortcut, script) are client-specific payload extensions implemented by ntfy-macos.
+They are not part of the ntfy protocol and will ignored by other ntfy clients.
 
 ## CLI Commands
 
