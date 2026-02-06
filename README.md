@@ -196,8 +196,12 @@ Here’s a summary of how actions are handled:
 | applescript | ❌             | ✅ Supported (extension) | 🟡 Planned (user-triggered only)                           |
 | shortcut    | ❌             | ✅ Supported (extension) | 🟡 Planned (user-triggered only)                           |
 
-**Note**: Some action types (applescript, shortcut, script) are client-specific payload extensions implemented by ntfy-macos.
-They are not part of the ntfy protocol and will ignored by other ntfy clients.
+> Some action types (`AppleScript` and `Shortcut`) are client-specific > payload extensions implemented by ntfy-macos.
+> They are not part of the ntfy protocol and will ignored by other ntfy clients.
+
+> `script` actions are blocked from the payload to prevent arbitrary code execution.  
+> `AppleScript` and `Shortcut` actions are sandboxed and considered safe to run, **but should only be used with a private ntfy server you fully control**.
+
 
 ## CLI Commands
 
