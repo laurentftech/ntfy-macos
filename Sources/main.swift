@@ -68,6 +68,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
             exit(1)
         }
 
+        Log.info("ntfy-macos v\(AppConstants.effectiveVersion) starting...")
         Log.info("Configured servers: \(config.servers.count)")
         for server in config.servers {
             let topics = server.topics.map { $0.name }.joined(separator: ", ")

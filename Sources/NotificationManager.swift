@@ -205,14 +205,36 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             registerCategoryFromMessage(categoryId: categoryId, actions: messageActions)
             content.categoryIdentifier = categoryId
 
-            // Store action URLs in userInfo for later retrieval
+            // Store action URLs, types, and HTTP details in userInfo for later retrieval
             var actionUrls: [String: String] = [:]
+            var actionTypes: [String: String] = [:]
+            var actionDetailsJson: [String: String] = [:]
             for (index, action) in messageActions.enumerated() {
+                let key = "ntfy-action-\(index)"
                 if let url = action.url {
-                    actionUrls["ntfy-action-\(index)"] = url
+                    actionUrls[key] = url
+                }
+                actionTypes[key] = action.action
+                if action.action == "http" {
+                    var details: [String: Any] = [:]
+                    details["method"] = action.method ?? "POST"
+                    details["url"] = action.url ?? ""
+                    if let body = action.body {
+                        details["body"] = body
+                    }
+                    if let headers = action.headers {
+                        details["headers"] = headers
+                    }
+                    // Serialize as JSON string for plist compatibility
+                    if let data = try? JSONSerialization.data(withJSONObject: details),
+                       let json = String(data: data, encoding: .utf8) {
+                        actionDetailsJson[key] = json
+                    }
                 }
             }
             userInfo["actionUrls"] = actionUrls
+            userInfo["actionTypes"] = actionTypes
+            userInfo["actionDetailsJson"] = actionDetailsJson
             print("Registered \(messageActions.count) actions from message")
             fflush(stdout)
         }
@@ -333,7 +355,9 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         )
 
         center.getNotificationCategories { existingCategories in
-            var categories = existingCategories
+            // Remove any existing category with the same ID before inserting
+            // (Set.insert won't replace, so we must remove first)
+            var categories = existingCategories.filter { $0.identifier != categoryId }
             categories.insert(category)
             self.center.setNotificationCategories(categories)
         }
@@ -361,6 +385,33 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             categories.insert(category)
             self.center.setNotificationCategories(categories)
         }
+    }
+
+    /// Executes an HTTP action from an ntfy message payload
+    private func executeHttpAction(url: URL, details: [String: Any]) {
+        let method = (details["method"] as? String)?.uppercased() ?? "POST"
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+
+        if let headers = details["headers"] as? [String: String] {
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
+
+        if let body = details["body"] as? String {
+            request.httpBody = body.data(using: .utf8)
+        }
+
+        Log.info("Executing HTTP \(method) action: \(url.absoluteString)")
+
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error = error {
+                Log.error("HTTP action failed: \(error.localizedDescription)")
+            } else if let httpResponse = response as? HTTPURLResponse {
+                Log.info("HTTP action completed with status: \(httpResponse.statusCode)")
+            }
+        }.resume()
     }
 
     /// Opens a URL securely by validating its scheme and domain against the allowed values in server config
@@ -463,14 +514,25 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let actionIdentifier = response.actionIdentifier
         let userInfo = response.notification.request.content.userInfo
 
-        // Check for ntfy message actions (URLs)
-        if actionIdentifier.hasPrefix("ntfy-action-"),
-           let actionUrls = userInfo["actionUrls"] as? [String: String],
-           let urlString = actionUrls[actionIdentifier],
-           let url = URL(string: urlString) {
-            print("Opening URL from ntfy action: \(urlString)")
-            fflush(stdout)
-            openUrlSecurely(url, forTopic: topic)
+        // Check for ntfy message actions
+        if actionIdentifier.hasPrefix("ntfy-action-") {
+            let actionTypes = userInfo["actionTypes"] as? [String: String] ?? [:]
+            let actionType = actionTypes[actionIdentifier] ?? "view"
+
+            if actionType == "http",
+               let actionDetailsJson = userInfo["actionDetailsJson"] as? [String: String],
+               let jsonString = actionDetailsJson[actionIdentifier],
+               let jsonData = jsonString.data(using: .utf8),
+               let details = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+               let urlString = details["url"] as? String,
+               let url = URL(string: urlString) {
+                executeHttpAction(url: url, details: details)
+            } else if let actionUrls = userInfo["actionUrls"] as? [String: String],
+                      let urlString = actionUrls[actionIdentifier],
+                      let url = URL(string: urlString) {
+                Log.info("Opening URL from ntfy action: \(urlString)")
+                openUrlSecurely(url, forTopic: topic)
+            }
             return
         }
 
@@ -487,12 +549,22 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
         if let action = matchingAction {
             if action.type == "script", let path = action.path {
-                print("Executing action script: \(path)")
+                Log.info("Executing action script: \(path)")
                 scriptRunner?.runScript(at: path, withArgument: messageBody)
             } else if action.type == "view", let urlString = action.url, let url = URL(string: urlString) {
-                print("Opening URL from config action: \(urlString)")
-                fflush(stdout)
+                Log.info("Opening URL from config action: \(urlString)")
                 openUrlSecurely(url, forTopic: topic)
+            } else if action.type == "shortcut", let name = action.name {
+                Log.info("Running shortcut from config action: \(name)")
+                scriptRunner?.runShortcut(named: name, withInput: messageBody)
+            } else if action.type == "applescript" {
+                if let scriptSource = action.script {
+                    Log.info("Running inline AppleScript from config action")
+                    scriptRunner?.runAppleScript(source: scriptSource)
+                } else if let path = action.path {
+                    Log.info("Running AppleScript file from config action: \(path)")
+                    scriptRunner?.runAppleScriptFile(at: path)
+                }
             }
         }
     }

@@ -89,6 +89,107 @@ final class ScriptRunner: @unchecked Sendable {
         return true
     }
 
+    /// Runs a macOS Shortcut asynchronously with an optional input string
+    func runShortcut(named shortcutName: String, withInput input: String? = nil) {
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
+            var args = ["run", shortcutName]
+            if let input = input {
+                args.append(contentsOf: ["-i", input])
+            }
+            process.arguments = args
+
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
+
+            do {
+                Log.info("Running shortcut: \(shortcutName)")
+                try process.run()
+                process.waitUntilExit()
+
+                let exitCode = process.terminationStatus
+                if exitCode == 0 {
+                    Log.success("Shortcut '\(shortcutName)' completed successfully")
+                } else {
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    let errorStr = String(data: errorData, encoding: .utf8) ?? ""
+                    Log.error("Shortcut '\(shortcutName)' exited with code \(exitCode): \(errorStr)")
+                }
+            } catch {
+                Log.error("Failed to run shortcut '\(shortcutName)': \(error)")
+            }
+        }
+    }
+
+    /// Runs an AppleScript from an inline script string
+    func runAppleScript(source: String) {
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", source]
+
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
+
+            do {
+                Log.info("Running AppleScript (inline)")
+                try process.run()
+                process.waitUntilExit()
+
+                let exitCode = process.terminationStatus
+                if exitCode == 0 {
+                    let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                    if let output = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines), !output.isEmpty {
+                        Log.info("AppleScript output: \(output)")
+                    }
+                    Log.success("AppleScript completed successfully")
+                } else {
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    let errorStr = String(data: errorData, encoding: .utf8) ?? ""
+                    Log.error("AppleScript exited with code \(exitCode): \(errorStr)")
+                }
+            } catch {
+                Log.error("Failed to run AppleScript: \(error)")
+            }
+        }
+    }
+
+    /// Runs an AppleScript from a file path
+    func runAppleScriptFile(at path: String) {
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = [path]
+
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
+
+            do {
+                Log.info("Running AppleScript file: \(path)")
+                try process.run()
+                process.waitUntilExit()
+
+                let exitCode = process.terminationStatus
+                if exitCode == 0 {
+                    Log.success("AppleScript file completed successfully")
+                } else {
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    let errorStr = String(data: errorData, encoding: .utf8) ?? ""
+                    Log.error("AppleScript file exited with code \(exitCode): \(errorStr)")
+                }
+            } catch {
+                Log.error("Failed to run AppleScript file: \(error)")
+            }
+        }
+    }
+
     /// Runs a script synchronously and returns the output (useful for testing)
     func runScriptSynchronously(at path: String, withArgument argument: String? = nil) -> (exitCode: Int32, output: String, error: String) {
         let fileManager = FileManager.default

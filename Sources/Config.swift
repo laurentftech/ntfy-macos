@@ -3,9 +3,11 @@ import Yams
 
 struct NotificationAction: Codable {
     let title: String
-    let type: String      // "script" or "view"
-    let path: String?     // for scripts
+    let type: String      // "script", "view", "shortcut", or "applescript"
+    let path: String?     // for scripts and applescript files
     let url: String?      // for view actions
+    let name: String?     // for shortcuts (the shortcut name)
+    let script: String?   // for inline applescript
 }
 
 struct TopicConfig: Codable {
@@ -227,7 +229,7 @@ final class ConfigManager: @unchecked Sendable {
     private static let knownRootKeys: Set<String> = ["servers"]
     private static let knownServerKeys: Set<String> = ["url", "token", "topics", "allowed_schemes", "allowed_domains", "fetch_missed"]
     private static let knownTopicKeys: Set<String> = ["name", "icon_path", "icon_symbol", "auto_run_script", "silent", "click_url", "actions", "fetch_missed"]
-    private static let knownActionKeys: Set<String> = ["title", "type", "path", "url"]
+    private static let knownActionKeys: Set<String> = ["title", "type", "path", "url", "name", "script"]
 
     /// Checks YAML for unknown keys that would be silently ignored
     /// Returns warning message if unknown keys found, nil otherwise
