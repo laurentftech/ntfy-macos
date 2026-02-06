@@ -99,12 +99,19 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private var isConnecting = false
     private var shouldReconnect = true
     private var retryAfterDelay: TimeInterval?  // From Retry-After header
+    private var lastMessageTime: Int  // Track last message timestamp for fetch_missed
+    private let lastMessageTimeKey: String  // UserDefaults key for persistence
 
     init(serverURL: String, topics: [String], authToken: String? = nil, fetchMissed: Bool = false) {
         self.serverURL = serverURL
         self.topics = topics
         self._authToken = authToken
         self.fetchMissed = fetchMissed
+
+        // Restore last message time from UserDefaults for fetch_missed
+        let topicsKey = topics.sorted().joined(separator: ",")
+        self.lastMessageTimeKey = "lastMessageTime-\(serverURL)-\(topicsKey)"
+        self.lastMessageTime = UserDefaults.standard.integer(forKey: lastMessageTimeKey)
 
         // Create a dedicated serial queue for URLSession callbacks
         self.delegateQueue = OperationQueue()
@@ -144,9 +151,15 @@ final class NtfyClient: NSObject, @unchecked Sendable {
 
         components.path = "/\(topicsString)/json"
 
-        // Add since=all to fetch missed messages when enabled
+        // Add since parameter to fetch missed messages when enabled
         if fetchMissed {
-            components.queryItems = [URLQueryItem(name: "since", value: "all")]
+            if lastMessageTime > 0 {
+                // Reconnect: only fetch messages since the last one we received
+                components.queryItems = [URLQueryItem(name: "since", value: String(lastMessageTime))]
+            } else {
+                // First connect: fetch all cached messages
+                components.queryItems = [URLQueryItem(name: "since", value: "all")]
+            }
         }
 
         guard let url = components.url else {
@@ -272,6 +285,14 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         do {
             let data = Data(line.utf8)
             let message = try JSONDecoder().decode(NtfyMessage.self, from: data)
+
+            // Track latest message time for fetch_missed reconnects
+            if message.time > lastMessageTime {
+                lastMessageTime = message.time
+                if fetchMissed {
+                    UserDefaults.standard.set(lastMessageTime, forKey: lastMessageTimeKey)
+                }
+            }
 
             if message.event == "message" {
                 callDelegate { delegate in
