@@ -28,6 +28,7 @@ Receive push notifications on your Mac from any source — servers, IoT devices,
 - **Config Validation**: Warns about unknown keys and typos in the menu bar
 - **Click to Open**: Click notifications to open in browser (configurable per topic)
 - **Automatic Permission Request**: Prompts for notification permission on first launch
+- **Local Notification Server**: Built-in HTTP server on localhost for scripts to trigger notifications
 
 ## Installation
 
@@ -159,6 +160,10 @@ servers:
 
 ### Configuration Options
 
+#### Global Fields
+
+- `local_server_port` (optional): Port for the local notification HTTP server (e.g., `9292`). Disabled if omitted.
+
 #### Server Fields
 
 - `url` (required): Server URL
@@ -178,9 +183,11 @@ servers:
 #### Action Fields
 
 - `title` (required): Button label
-- `type` (required): `script` or `view`.
-- `path` (required for `script` type): Absolute path to the script file.
-- `url` (required for `view` type): URL to open.
+- `type` (required): `script`, `view`, `shortcut`, or `applescript`
+- `path` (for `script` and `applescript` file): Absolute path to the script file
+- `url` (for `view`): URL to open
+- `name` (for `shortcut`): macOS Shortcut name
+- `script` (for `applescript` inline): AppleScript source code
 
 **Note**: Config-defined actions ALWAYS override any actions sent with the ntfy message.
 
@@ -190,17 +197,14 @@ Here’s a summary of how actions are handled:
 | ----------- | ------------- | ----------------------- | --------------------------- |
 | view        | ✅ Standard    | ✅ Supported             | ✅ Supported                 |
 | http        | ✅ Standard    | ✅ Supported             | ❌ Not supported (by design) |
-| broadcast   | ✅ Standard    | ✅ Supported             | ❌ Not supported (by design)                          |
-| dismiss     | ✅ Standard    | ✅ Supported             | ❌ Not supported (by design)                          |
+| broadcast   | ✅ Standard    | ❌ Ignored (Android-only)| ❌ Not applicable            |
 | script      | ❌             | ❌ Blocked               | ✅ Supported                 |
-| applescript | ❌             | ✅ Supported (extension) | 🟡 Planned (user-triggered only)                           |
-| shortcut    | ❌             | ✅ Supported (extension) | 🟡 Planned (user-triggered only)                           |
+| applescript | ❌             | ❌ Blocked               | ✅ Supported                 |
+| shortcut    | ❌             | ❌ Blocked               | ✅ Supported                 |
 
+> `script`, `applescript`, and `shortcut` actions are **only available via config.yml** — they cannot be triggered from message payloads. This prevents remote code execution.
 
-> `script` actions are blocked from the payload to prevent arbitrary code execution.  
-> `AppleScript` and `Shortcut` actions are sandboxed and considered safe to run, **but should only be used with a private ntfy server you fully control**.
-
-**Note:** `applescript` and `shortcut` are **ntfy-macos client-specific actions**. Only `view`, `http`, `broadcast`, and `dismiss` are part of the official ntfy protocol. Planned config.yml actions will be user-triggered only; payload execution remains limited to supported types.
+**Note:** `applescript` and `shortcut` are **ntfy-macos client-specific action types**. Only `view`, `http`, `broadcast`, and `dismiss` are part of the official ntfy protocol.
 
 ## CLI Commands
 
@@ -255,12 +259,24 @@ ntfy-macos help
 
 ## Script Execution
 
-Scripts receive the message body as the first argument (`$1`):
+Scripts receive the message body as the first argument (`$1`) and full message context as environment variables:
 
 ```bash
 #!/bin/bash
 MESSAGE="$1"
-echo "Received: $MESSAGE"
+
+# Environment variables available:
+# NTFY_ID       - Unique message ID
+# NTFY_TOPIC    - Topic name
+# NTFY_TIME     - Unix timestamp
+# NTFY_EVENT    - Event type (always "message")
+# NTFY_TITLE    - Message title (if set)
+# NTFY_MESSAGE  - Message body (if set)
+# NTFY_PRIORITY - Priority level 1-5 (if set)
+# NTFY_TAGS     - Comma-separated tags (if set)
+# NTFY_CLICK    - Click URL (if set)
+
+echo "[$NTFY_TOPIC] $NTFY_TITLE: $MESSAGE"
 # Your automation logic here
 ```
 
@@ -290,6 +306,74 @@ Scripts are **only executed if explicitly configured** in your local `config.yml
 - Keep your configuration file secure (`chmod 600 ~/.config/ntfy-macos/config.yml`)
 - For sensitive automation, use a self-hosted ntfy server with authentication
 - Use `allowed_schemes` and `allowed_domains` to restrict which URLs can be opened.
+
+## Local Notification Server
+
+ntfy-macos can run a local HTTP server on localhost that allows scripts and local tools to trigger macOS notifications directly, without going through an external ntfy server.
+
+### Setup
+
+Add `local_server_port` to the root of your `config.yml`:
+
+```yaml
+local_server_port: 9292
+
+servers:
+  - url: https://ntfy.sh
+    topics:
+      - name: alerts
+```
+
+### Usage
+
+Send a POST request to trigger a notification:
+
+```bash
+curl -X POST http://127.0.0.1:9292/notify \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Build Complete", "message": "Project compiled successfully", "priority": 3, "tags": ["white_check_mark"]}'
+```
+
+### API
+
+**POST /notify**
+
+| Field      | Type     | Required | Description                              |
+|------------|----------|----------|------------------------------------------|
+| `title`    | string   | Yes      | Notification title                       |
+| `message`  | string   | Yes      | Notification body                        |
+| `priority` | integer  | No       | Priority 1-5 (maps to macOS levels)      |
+| `tags`     | string[] | No       | Emoji tags (e.g., `["warning", "fire"]`) |
+
+**GET /health** - Returns `{"status": "ok"}` for health checks.
+
+### Example: Auto-run Script with Local Notifications
+
+Combine `auto_run_script` with the local server to create rich feedback loops:
+
+```bash
+#!/bin/bash
+# auto_run_script for topic "deployments"
+# Receives message via $1 and env vars, then triggers a local follow-up notification
+
+RESULT=$(deploy.sh "$NTFY_MESSAGE" 2>&1)
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+  curl -s -X POST http://127.0.0.1:9292/notify \
+    -d "{\"title\": \"Deploy Success\", \"message\": \"$NTFY_MESSAGE deployed successfully\", \"tags\": [\"white_check_mark\"]}"
+else
+  curl -s -X POST http://127.0.0.1:9292/notify \
+    -d "{\"title\": \"Deploy Failed\", \"message\": \"$RESULT\", \"priority\": 4, \"tags\": [\"x\"]}"
+fi
+```
+
+### Security
+
+- Binds to `127.0.0.1` only (not accessible from the network)
+- Maximum request body size: 4 KB
+- No code execution - only triggers notifications
+- Disabled by default (requires `local_server_port` in config)
 
 ## Priority Mapping
 

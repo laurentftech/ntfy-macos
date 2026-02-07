@@ -142,4 +142,80 @@ final class ScriptRunnerTests: XCTestCase {
         XCTAssertEqual(result.exitCode, 0)
         XCTAssertTrue(result.output.contains("🔔"))
     }
+
+    // MARK: - Extra Environment Variables
+
+    func testRunScriptWithExtraEnvVars() throws {
+        let scriptPath = tempDir.appendingPathComponent("env-test.sh")
+        try """
+        #!/bin/bash
+        echo "TOPIC:$NTFY_TOPIC"
+        echo "TITLE:$NTFY_TITLE"
+        echo "PRIORITY:$NTFY_PRIORITY"
+        echo "TAGS:$NTFY_TAGS"
+        """.write(to: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+
+        let env: [String: String] = [
+            "NTFY_TOPIC": "alerts",
+            "NTFY_TITLE": "Test Alert",
+            "NTFY_PRIORITY": "4",
+            "NTFY_TAGS": "warning,fire",
+        ]
+        let result = runner.runScriptSynchronously(at: scriptPath.path, extraEnv: env)
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertTrue(result.output.contains("TOPIC:alerts"))
+        XCTAssertTrue(result.output.contains("TITLE:Test Alert"))
+        XCTAssertTrue(result.output.contains("PRIORITY:4"))
+        XCTAssertTrue(result.output.contains("TAGS:warning,fire"))
+    }
+
+    func testRunScriptWithExtraEnvAndArgument() throws {
+        let scriptPath = tempDir.appendingPathComponent("env-arg-test.sh")
+        try """
+        #!/bin/bash
+        echo "ARG:$1"
+        echo "ID:$NTFY_ID"
+        echo "MSG:$NTFY_MESSAGE"
+        """.write(to: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+
+        let env: [String: String] = [
+            "NTFY_ID": "abc123",
+            "NTFY_MESSAGE": "Hello World",
+        ]
+        let result = runner.runScriptSynchronously(at: scriptPath.path, withArgument: "Hello World", extraEnv: env)
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertTrue(result.output.contains("ARG:Hello World"))
+        XCTAssertTrue(result.output.contains("ID:abc123"))
+        XCTAssertTrue(result.output.contains("MSG:Hello World"))
+    }
+
+    func testRunScriptWithNilExtraEnv() throws {
+        let scriptPath = tempDir.appendingPathComponent("nil-env.sh")
+        try "#!/bin/bash\necho 'OK'".write(to: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+
+        let result = runner.runScriptSynchronously(at: scriptPath.path, extraEnv: nil)
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertTrue(result.output.contains("OK"))
+    }
+
+    func testRunScriptExtraEnvDoesNotOverridePATH() throws {
+        let scriptPath = tempDir.appendingPathComponent("path-env.sh")
+        try "#!/bin/bash\necho $PATH".write(to: scriptPath, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+
+        let env: [String: String] = [
+            "NTFY_TOPIC": "test",
+        ]
+        let result = runner.runScriptSynchronously(at: scriptPath.path, extraEnv: env)
+
+        XCTAssertEqual(result.exitCode, 0)
+        // PATH should still contain the enhanced paths
+        XCTAssertTrue(result.output.contains("/opt/homebrew/bin"))
+    }
 }
