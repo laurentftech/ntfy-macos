@@ -314,26 +314,35 @@ ntfy-macos can run a local HTTP server on localhost that allows scripts and loca
 ```mermaid
 flowchart LR
     subgraph External
-        ntfy["ntfy server"]
-        cron["cron / launchd"]
-        ci["CI pipeline"]
+        ntfy["🌐 ntfy server"]
+        cron["⏰ cron / launchd"]
+        ci["🔧 CI pipeline"]
     end
 
     subgraph ntfy-macos
-        client["ntfy client"]
-        script["auto_run_script"]
-        local["Local HTTP server\n127.0.0.1:9292"]
-        notif["macOS notification"]
+        client["📡 ntfy client"]
+        script["📜 auto_run_script"]
+        local["🖥️ Local HTTP server
+        127.0.0.1:9292"]
+        notif["🔔 macOS notification"]
     end
 
     ntfy -- "SSE stream" --> client
-    client -- "1. show notification" --> notif
-    client -- "2. run script with\nNTFY_* env vars" --> script
-    script -- "POST /notify\n(result feedback)" --> local
-    local -- "follow-up\nnotification" --> notif
+    client -- "show notification" --> notif
+    client -- "run script + NTFY_* env" --> script
+    script -- "POST /notify" --> local
+    local -- "follow-up" --> notif
 
     cron -- "POST /notify" --> local
     ci -- "POST /notify" --> local
+
+    style ntfy fill:#4a90d9,stroke:#2c5f8a,color:#fff
+    style cron fill:#6c757d,stroke:#495057,color:#fff
+    style ci fill:#6c757d,stroke:#495057,color:#fff
+    style client fill:#28a745,stroke:#1e7e34,color:#fff
+    style script fill:#ffc107,stroke:#d39e00,color:#000
+    style local fill:#17a2b8,stroke:#117a8b,color:#fff
+    style notif fill:#e83e8c,stroke:#c21c6b,color:#fff
 ```
 
 ### Setup
