@@ -311,6 +311,31 @@ Scripts are **only executed if explicitly configured** in your local `config.yml
 
 ntfy-macos can run a local HTTP server on localhost that allows scripts and local tools to trigger macOS notifications directly, without going through an external ntfy server.
 
+```mermaid
+flowchart LR
+    subgraph External
+        ntfy["ntfy server"]
+        cron["cron / launchd"]
+        ci["CI pipeline"]
+    end
+
+    subgraph ntfy-macos
+        client["ntfy client"]
+        script["auto_run_script"]
+        local["Local HTTP server\n127.0.0.1:9292"]
+        notif["macOS notification"]
+    end
+
+    ntfy -- "SSE stream" --> client
+    client -- "1. show notification" --> notif
+    client -- "2. run script with\nNTFY_* env vars" --> script
+    script -- "POST /notify\n(result feedback)" --> local
+    local -- "follow-up\nnotification" --> notif
+
+    cron -- "POST /notify" --> local
+    ci -- "POST /notify" --> local
+```
+
 ### Setup
 
 Add `local_server_port` to the root of your `config.yml`:
