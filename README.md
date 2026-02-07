@@ -327,7 +327,7 @@ flowchart LR
         notif["🔔 macOS notification"]
     end
 
-    ntfy -- "SSE stream" --> client
+    ntfy -- "subscribe" --> client
     client -- "show notification" --> notif
     client -- "run script + NTFY_* env" --> script
     script -- "POST /notify" --> local
