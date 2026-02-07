@@ -4,6 +4,10 @@
 # Note: Unknown keys in your config will trigger a warning in the menu bar.
 # This helps catch typos like "icon_path" vs "iconpath" or misplaced options.
 
+# Enable local notification server on localhost (optional)
+# Scripts can POST to http://127.0.0.1:9292/notify to trigger notifications
+# local_server_port: 9292
+
 servers:
   # ===========================================
   # Home Automation (Home Assistant)
@@ -194,6 +198,53 @@ servers:
           - title: "Open PR"
             type: view
             url: "https://github.com/pulls"
+
+  # ===========================================
+  # macOS Shortcuts Integration
+  # ===========================================
+  - url: https://ntfy.home.local
+    token: tk_shortcuts_token
+    topics:
+      - name: automation
+        icon_symbol: wand.and.stars
+        actions:
+          - title: "Run Shortcut"
+            type: shortcut
+            name: "My Automation Shortcut"
+          - title: "Focus Mode"
+            type: shortcut
+            name: "Toggle Focus Mode"
+
+  # ===========================================
+  # AppleScript Actions
+  # ===========================================
+  - url: https://ntfy.home.local
+    token: tk_applescript_token
+    topics:
+      - name: media-control
+        icon_symbol: play.circle.fill
+        actions:
+          # Inline AppleScript
+          - title: "Pause Music"
+            type: applescript
+            script: 'tell application "Music" to pause'
+          # AppleScript file
+          - title: "Run Workflow"
+            type: applescript
+            path: /Users/you/Scripts/workflow.scpt
+
+  # ===========================================
+  # Fetch Missed Messages
+  # ===========================================
+  # Fetch messages that arrived while the app was not running
+  - url: https://ntfy.myserver.com
+    token: tk_yourtoken
+    fetch_missed: true  # Enable for all topics on this server
+    topics:
+      - name: important-alerts
+        icon_symbol: exclamationmark.triangle.fill
+      - name: low-priority
+        fetch_missed: false  # Override: disable for this topic
 
   # ===========================================
   # URL Security (allowed_schemes & allowed_domains)

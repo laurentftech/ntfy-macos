@@ -23,6 +23,7 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     private var notificationManager: NotificationManager?
     private let scriptRunner = ScriptRunner()
     private var configWatcher: ConfigWatcher?
+    private var localServer: LocalNotificationServer?
 
     init() {
         // Don't initialize notificationManager here - wait until it's needed
@@ -130,6 +131,20 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     private func connectClients() {
         guard let config = ConfigManager.shared.config else { return }
 
+        // Start local notification server if configured
+        if let port = config.localServerPort {
+            localServer?.stop()
+            localServer = LocalNotificationServer(port: port)
+            do {
+                try localServer?.start()
+            } catch {
+                Log.error("Failed to start local notification server on port \(port): \(error)")
+            }
+        } else {
+            localServer?.stop()
+            localServer = nil
+        }
+
         // Initialize status bar with server info
         let serverInfos = config.servers.map { server in
             (url: server.url, topics: server.topics.map { $0.name })
@@ -188,6 +203,10 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
     func reloadConfig() {
         Log.info("Reloading configuration...")
 
+        // Stop local server
+        localServer?.stop()
+        localServer = nil
+
         // Disconnect all clients
         for client in clients {
             client.disconnect()
@@ -240,7 +259,19 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         if let autoRunScript = topicConfig?.autoRunScript {
             if scriptRunner.validateScript(at: autoRunScript) {
                 Log.info("Auto-running script: \(autoRunScript)")
-                scriptRunner.runScript(at: autoRunScript, withArgument: message.message)
+                // Pass message context as environment variables
+                var env: [String: String] = [
+                    "NTFY_ID": message.id,
+                    "NTFY_TOPIC": message.topic,
+                    "NTFY_TIME": String(message.time),
+                    "NTFY_EVENT": message.event,
+                ]
+                if let title = message.title { env["NTFY_TITLE"] = title }
+                if let msg = message.message { env["NTFY_MESSAGE"] = msg }
+                if let priority = message.priority { env["NTFY_PRIORITY"] = String(priority) }
+                if let tags = message.tags { env["NTFY_TAGS"] = tags.joined(separator: ",") }
+                if let click = message.click { env["NTFY_CLICK"] = click }
+                scriptRunner.runScript(at: autoRunScript, withArgument: message.message, extraEnv: env)
             }
         }
 

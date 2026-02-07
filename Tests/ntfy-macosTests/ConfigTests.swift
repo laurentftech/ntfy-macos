@@ -330,6 +330,36 @@ final class ConfigTests: XCTestCase {
         XCTAssertNil(serverNone)
     }
 
+    // MARK: - Local Server Port Tests
+
+    func testAppConfigWithLocalServerPort() throws {
+        let yaml = """
+        local_server_port: 9292
+        servers:
+          - url: https://ntfy.sh
+            topics:
+              - name: alerts
+        """
+        let decoder = YAMLDecoder()
+        let config = try decoder.decode(AppConfig.self, from: yaml)
+
+        XCTAssertEqual(config.localServerPort, 9292)
+        XCTAssertEqual(config.servers.count, 1)
+    }
+
+    func testAppConfigWithoutLocalServerPort() throws {
+        let yaml = """
+        servers:
+          - url: https://ntfy.sh
+            topics:
+              - name: alerts
+        """
+        let decoder = YAMLDecoder()
+        let config = try decoder.decode(AppConfig.self, from: yaml)
+
+        XCTAssertNil(config.localServerPort)
+    }
+
     // MARK: - Config File Permissions Tests
 
     func testConfigErrorInsecurePermissionsDescription() throws {

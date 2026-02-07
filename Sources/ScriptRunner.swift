@@ -5,7 +5,8 @@ final class ScriptRunner: @unchecked Sendable {
     private let enhancedPATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
     /// Runs a shell script asynchronously with the message body as an argument
-    func runScript(at path: String, withArgument argument: String? = nil) {
+    /// Additional message context can be passed via environment variables
+    func runScript(at path: String, withArgument argument: String? = nil, extraEnv: [String: String]? = nil) {
         DispatchQueue.global(qos: .utility).async { [enhancedPATH = self.enhancedPATH] in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
@@ -18,6 +19,11 @@ final class ScriptRunner: @unchecked Sendable {
             // Set up environment with enhanced PATH
             var environment = ProcessInfo.processInfo.environment
             environment["PATH"] = enhancedPATH
+            if let extraEnv = extraEnv {
+                for (key, value) in extraEnv {
+                    environment[key] = value
+                }
+            }
             process.environment = environment
 
             // Capture output
@@ -191,7 +197,7 @@ final class ScriptRunner: @unchecked Sendable {
     }
 
     /// Runs a script synchronously and returns the output (useful for testing)
-    func runScriptSynchronously(at path: String, withArgument argument: String? = nil) -> (exitCode: Int32, output: String, error: String) {
+    func runScriptSynchronously(at path: String, withArgument argument: String? = nil, extraEnv: [String: String]? = nil) -> (exitCode: Int32, output: String, error: String) {
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
 
@@ -210,6 +216,11 @@ final class ScriptRunner: @unchecked Sendable {
 
         var environment = ProcessInfo.processInfo.environment
         environment["PATH"] = enhancedPATH
+        if let extraEnv = extraEnv {
+            for (key, value) in extraEnv {
+                environment[key] = value
+            }
+        }
         process.environment = environment
 
         let outputPipe = Pipe()
