@@ -121,3 +121,27 @@ jobs:
           git add Formula/ntfy-macos.rb
           git commit -m "Update ntfy-macos to ${VERSION}"
           git push https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/laurentftech/homebrew-ntfy-macos.git main
+
+      - name: Notify via ntfy
+        if: always()
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_RELEASE_TOPIC }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          if [ -z "$NTFY_TOPIC" ]; then
+            echo "NTFY_RELEASE_TOPIC not set, skipping notification"
+            exit 0
+          fi
+          if [ "${{ job.status }}" = "success" ]; then
+            curl -s -X POST "https://ntfy.sh/$NTFY_TOPIC" \
+              -H "Title: ntfy-macos ${VERSION} released" \
+              -H "Priority: 3" \
+              -H "Tags: tada,rocket" \
+              -d "Release ${VERSION} published successfully. Homebrew tap updated."
+          else
+            curl -s -X POST "https://ntfy.sh/$NTFY_TOPIC" \
+              -H "Title: ntfy-macos ${VERSION} release failed" \
+              -H "Priority: 4" \
+              -H "Tags: x,warning" \
+              -d "Release workflow failed for ${VERSION}. Check: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
