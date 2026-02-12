@@ -82,7 +82,12 @@ class StatusBarController: NSObject {
 
         menu?.addItem(NSMenuItem.separator())
 
-        let editConfigItem = NSMenuItem(title: "Edit Config...", action: #selector(editConfig), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        settingsItem.isEnabled = true
+        menu?.addItem(settingsItem)
+
+        let editConfigItem = NSMenuItem(title: "Edit Config File...", action: #selector(editConfig), keyEquivalent: "")
         editConfigItem.target = self
         editConfigItem.isEnabled = true
         menu?.addItem(editConfigItem)
@@ -116,6 +121,10 @@ class StatusBarController: NSObject {
         menu?.addItem(quitItem)
 
         statusItem?.menu = menu
+    }
+
+    @objc func openSettings() {
+        SettingsWindowController.shared.showSettings()
     }
 
     @objc func editConfig() {

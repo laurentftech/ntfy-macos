@@ -8,6 +8,15 @@ struct NotificationAction: Codable {
     let url: String?      // for view actions
     let name: String?     // for shortcuts (the shortcut name)
     let script: String?   // for inline applescript
+
+    init(title: String, type: String, path: String? = nil, url: String? = nil, name: String? = nil, script: String? = nil) {
+        self.title = title
+        self.type = type
+        self.path = path
+        self.url = url
+        self.name = name
+        self.script = script
+    }
 }
 
 struct TopicConfig: Codable {
@@ -19,6 +28,18 @@ struct TopicConfig: Codable {
     let clickUrl: ClickUrlConfig?  // Control click behavior: true/false/custom URL
     let actions: [NotificationAction]?
     let fetchMissed: Bool?
+
+    init(name: String, iconPath: String? = nil, iconSymbol: String? = nil, autoRunScript: String? = nil, silent: Bool? = nil, clickUrl: ClickUrlConfig? = nil, actions: [NotificationAction]? = nil, fetchMissed: Bool? = nil) {
+        self.name = name
+        self.iconPath = iconPath
+        self.iconSymbol = iconSymbol
+        self.autoRunScript = autoRunScript
+        self.silent = silent
+        self.clickUrl = clickUrl
+        self.actions = actions
+        self.fetchMissed = fetchMissed
+    }
+
     enum CodingKeys: String, CodingKey {
         case name
         case iconPath = "icon_path"
@@ -74,6 +95,15 @@ struct ServerConfig: Codable {
     let allowedDomains: [String]?
     let fetchMissed: Bool?
 
+    init(url: String, token: String? = nil, topics: [TopicConfig], allowedSchemes: [String]? = nil, allowedDomains: [String]? = nil, fetchMissed: Bool? = nil) {
+        self.url = url
+        self.token = token
+        self.topics = topics
+        self.allowedSchemes = allowedSchemes
+        self.allowedDomains = allowedDomains
+        self.fetchMissed = fetchMissed
+    }
+
     enum CodingKeys: String, CodingKey {
         case url
         case token
@@ -127,6 +157,11 @@ struct ServerConfig: Codable {
 struct AppConfig: Codable {
     let servers: [ServerConfig]
     let localServerPort: UInt16?
+
+    init(servers: [ServerConfig], localServerPort: UInt16? = nil) {
+        self.servers = servers
+        self.localServerPort = localServerPort
+    }
 
     enum CodingKeys: String, CodingKey {
         case servers
