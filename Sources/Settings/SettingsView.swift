@@ -85,6 +85,16 @@ struct SettingsView: View {
                         .frame(width: 8, height: 8)
                         .help("Unsaved changes")
                 }
+
+                Button {
+                    let path = ConfigManager.defaultConfigPath
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                } label: {
+                    Image(systemName: "doc.text")
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.isLocked)
+                .help("Open config file in editor")
             }
             .padding(8)
         }

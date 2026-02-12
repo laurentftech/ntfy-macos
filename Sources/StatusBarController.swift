@@ -87,11 +87,6 @@ class StatusBarController: NSObject {
         settingsItem.isEnabled = true
         menu?.addItem(settingsItem)
 
-        let editConfigItem = NSMenuItem(title: "Edit Config File...", action: #selector(editConfig), keyEquivalent: "")
-        editConfigItem.target = self
-        editConfigItem.isEnabled = true
-        menu?.addItem(editConfigItem)
-
         let showConfigItem = NSMenuItem(title: "Show Config in Finder", action: #selector(showConfigInFinder), keyEquivalent: "")
         showConfigItem.target = self
         showConfigItem.isEnabled = true
@@ -125,11 +120,6 @@ class StatusBarController: NSObject {
 
     @objc func openSettings() {
         SettingsWindowController.shared.showSettings()
-    }
-
-    @objc func editConfig() {
-        let configPath = NSString(string: "~/.config/ntfy-macos/config.yml").expandingTildeInPath
-        NSWorkspace.shared.open(URL(fileURLWithPath: configPath))
     }
 
     @objc func showConfigInFinder() {
