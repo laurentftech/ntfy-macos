@@ -56,7 +56,7 @@ struct SettingsView: View {
                 } label: {
                     Image(systemName: viewModel.isLocked ? "lock.fill" : "lock.open.fill")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .help(viewModel.isLocked ? "Unlock to edit" : "Lock editing")
 
                 Divider()
