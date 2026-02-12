@@ -141,6 +141,8 @@ class PermissionHelper {
         window?.close()
         window = nil
         label = nil
+        // Re-apply accessory policy to prevent Dock icon from lingering
+        NSApp.setActivationPolicy(.accessory)
         callback?(granted)
     }
 }

@@ -146,6 +146,8 @@ class StatusBarController: NSObject {
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.runModal()
+        // Re-apply accessory policy to prevent Dock icon from lingering
+        NSApp.setActivationPolicy(.accessory)
     }
 
     @objc func openServerURL(_ sender: NSMenuItem) {
@@ -239,6 +241,17 @@ class StatusBarController: NSObject {
         aboutWindow = window  // Store reference to prevent deallocation
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+
+        // Ensure we revert to accessory mode when the About window is closed
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                _ = NSApp.setActivationPolicy(.accessory)
+            }
+        }
     }
 
     func updateStatus(_ status: String) {
