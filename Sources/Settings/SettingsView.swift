@@ -9,7 +9,7 @@ struct SettingsView: View {
         } detail: {
             detail
         }
-        .frame(minWidth: 650, minHeight: 500)
+        .frame(minWidth: 700, idealWidth: 800, minHeight: 500, idealHeight: 600)
     }
 
     // MARK: - Sidebar
@@ -19,6 +19,7 @@ struct SettingsView: View {
             Section("General") {
                 HStack {
                     Text("Local server port")
+                        .foregroundStyle(.secondary)
                     Spacer()
                     TextField("Disabled", text: $viewModel.localServerPort)
                         .frame(width: 80)
@@ -35,6 +36,7 @@ struct SettingsView: View {
                             .replacingOccurrences(of: "http://", with: ""),
                         systemImage: "server.rack"
                     )
+                    .foregroundStyle(.secondary)
                     .tag(server.id)
                 }
                 .onDelete { indexSet in

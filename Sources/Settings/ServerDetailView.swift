@@ -10,8 +10,13 @@ struct ServerDetailView: View {
     var body: some View {
         Form {
             Section("Server") {
-                TextField("URL", text: $server.url, prompt: Text("https://ntfy.sh"))
-                    .disabled(isLocked)
+                HStack {
+                    Text("URL")
+                        .foregroundStyle(.secondary)
+                    TextField("", text: $server.url)
+                        .textFieldStyle(.plain)
+                        .disabled(isLocked)
+                }
 
                 HStack {
                     if server.token.isEmpty {
@@ -34,6 +39,7 @@ struct ServerDetailView: View {
                 }
 
                 Toggle("Fetch missed messages on reconnect", isOn: $server.fetchMissed)
+                    .foregroundStyle(.secondary)
                     .disabled(isLocked)
             }
 
@@ -55,8 +61,10 @@ struct ServerDetailView: View {
             } header: {
                 HStack {
                     Text("Topics")
+                        .foregroundStyle(.secondary)
                     Spacer()
                     Text("Fetch")
+                        .foregroundStyle(.secondary)
                 }
             }
         }
