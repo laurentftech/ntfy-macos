@@ -40,3 +40,10 @@ homebrew/ntfy-macos.rb
 # Other
 BUILD_SUMMARY.md
 PROJECT_OVERVIEW.md
+.clinerules/
+.gemini/
+.kilocode/
+.kilocodemodes
+ntfy-mac.code-workspace
+.roo/
+_bmad/
