@@ -29,6 +29,7 @@ Receive push notifications on your Mac from any source — servers, IoT devices,
 - **Click to Open**: Click notifications to open in browser (configurable per topic)
 - **Automatic Permission Request**: Prompts for notification permission on first launch
 - **Local Notification Server**: Built-in HTTP server on localhost for scripts to trigger notifications
+- **Settings Window**: Native SwiftUI interface for server and topic configuration with real-time connection status
 
 ## Installation
 
@@ -408,6 +409,8 @@ fi
 - Maximum request body size: 4 KB
 - No code execution - only triggers notifications
 - Disabled by default (requires `local_server_port` in config)
+- Configure via Settings window (click lock to edit, enter port)
+- Test your setup with the built-in curl example (click Copy button)
 
 ## Priority Mapping
 
