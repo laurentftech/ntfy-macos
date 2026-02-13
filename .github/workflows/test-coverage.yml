@@ -1,0 +1,40 @@
+name: Test with Coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: macos-14
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.1.app
+      
+      - name: Run tests with coverage
+        run: swift test --enable-code-coverage
+      
+      - name: Generate coverage report
+        run: |
+          # Find and generate coverage XML
+          find . -name "*.xcresult" -type d -newer /tmp 2>/dev/null | head -1 | while read result; do
+            xcrun xccov view --report --xml "$result" > coverage.xml 2>/dev/null || true
+          done
+          # Alternative: just run and let codecov handle it
+          ls -la .build/**/*.xcresult 2>/dev/null | head -5
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: ntfy-macos
+          fail_ci_if_error: false
+          verbose: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
