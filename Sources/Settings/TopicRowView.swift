@@ -20,7 +20,7 @@ struct TopicRowView: View {
                 .foregroundStyle(.secondary)
                 .font(.caption)
             TextField("", text: $topic.name, prompt: Text("topic"))
-                .textFieldStyle(.plain)
+                .modifier(LockedTextFieldModifier(isLocked: isLocked))
                 .disabled(isLocked)
 
             Spacer()

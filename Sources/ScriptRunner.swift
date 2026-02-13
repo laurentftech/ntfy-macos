@@ -1,6 +1,24 @@
 import Foundation
 
-final class ScriptRunner: @unchecked Sendable {
+/// Protocol for script execution - enables dependency injection and mocking for tests
+protocol ScriptRunnerProtocol: Sendable {
+    /// Runs a shell script asynchronously with the message body as an argument
+    func runScript(at path: String, withArgument argument: String?, extraEnv: [String: String]?)
+    
+    /// Validates that a script exists and is executable
+    func validateScript(at path: String) -> Bool
+    
+    /// Runs a macOS Shortcut asynchronously
+    func runShortcut(named shortcutName: String, withInput input: String?)
+    
+    /// Runs an AppleScript from an inline script string
+    func runAppleScript(source: String)
+    
+    /// Runs an AppleScript from a file path
+    func runAppleScriptFile(at path: String)
+}
+
+final class ScriptRunner: ScriptRunnerProtocol, @unchecked Sendable {
     /// Enhanced PATH for script execution including common Homebrew and system directories
     private let enhancedPATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 

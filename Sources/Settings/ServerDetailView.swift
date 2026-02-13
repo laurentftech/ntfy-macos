@@ -1,5 +1,19 @@
 import SwiftUI
 
+// MARK: - TextField Style Modifier
+
+struct LockedTextFieldModifier: ViewModifier {
+    let isLocked: Bool
+    
+    func body(content: Content) -> some View {
+        if isLocked {
+            content.textFieldStyle(.plain)
+        } else {
+            content.textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
 struct ServerDetailView: View {
     @Binding var server: EditableServer
     @ObservedObject var viewModel: SettingsViewModel
@@ -14,7 +28,7 @@ struct ServerDetailView: View {
                     Text("URL")
                         .foregroundStyle(.secondary)
                     TextField("", text: $server.url)
-                        .textFieldStyle(.plain)
+                        .modifier(LockedTextFieldModifier(isLocked: isLocked))
                         .disabled(isLocked)
                 }
 

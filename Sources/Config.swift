@@ -204,6 +204,65 @@ enum ConfigError: Error, LocalizedError {
     }
 }
 
+/// Validates configuration before use
+struct ConfigValidator {
+    
+    /// Validates the entire config
+    static func validate(_ config: AppConfig) throws {
+        // Validate servers
+        for server in config.servers {
+            try validateServerURL(server.url)
+            
+            // Validate topics
+            guard !server.topics.isEmpty else {
+                throw ConfigError.decodingError(NSError(
+                    domain: "ConfigValidator",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Server \(server.url) has no topics configured"]
+                ))
+            }
+            
+            // Validate unique topic names per server
+            let topicNames = server.topics.map { $0.name }
+            if topicNames.count != Set(topicNames).count {
+                throw ConfigError.decodingError(NSError(
+                    domain: "ConfigValidator",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Duplicate topic names in server \(server.url)"]
+                ))
+            }
+        }
+    }
+    
+    /// Validates a server URL
+    static func validateServerURL(_ urlString: String) throws {
+        guard let url = URL(string: urlString) else {
+            throw ConfigError.decodingError(NSError(
+                domain: "ConfigValidator",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid URL format: \(urlString)"]
+            ))
+        }
+        
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            throw ConfigError.decodingError(NSError(
+                domain: "ConfigValidator",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "URL must use http or https scheme: \(urlString)"]
+            ))
+        }
+        
+        guard url.host != nil && !url.host!.isEmpty else {
+            throw ConfigError.decodingError(NSError(
+                domain: "ConfigValidator",
+                code: 5,
+                userInfo: [NSLocalizedDescriptionKey: "URL must have a valid host: \(urlString)"]
+            ))
+        }
+    }
+}
+
 final class ConfigManager: @unchecked Sendable {
     static let shared = ConfigManager()
     private let lock = NSLock()

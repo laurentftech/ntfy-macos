@@ -57,6 +57,16 @@ class SettingsViewModel: ObservableObject {
     @Published var hasUnsavedChanges: Bool = false
     @Published var isLocked: Bool = true
     @Published var saveError: String?
+    @Published var serverConnectionStates: [String: StatusBarController.ConnectionState] = [:]
+
+    func refreshConnectionStates() {
+        let statuses = StatusBarController.shared.getServerStatuses()
+        var states: [String: StatusBarController.ConnectionState] = [:]
+        for (url, status) in statuses {
+            states[url] = status.state
+        }
+        serverConnectionStates = states
+    }
 
     private var cancellables = Set<AnyCancellable>()
 

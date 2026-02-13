@@ -326,6 +326,11 @@ class StatusBarController: NSObject {
         }
     }
 
+    /// Get all server connection statuses (for Settings view)
+    func getServerStatuses() -> [String: ServerConnectionStatus] {
+        return serverStatuses
+    }
+
     // MARK: - Connecting Animation
 
     private func startConnectingAnimationIfNeeded() {

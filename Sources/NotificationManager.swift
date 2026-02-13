@@ -13,7 +13,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
     }()
 
     private let lock = NSLock()
-    private var _scriptRunner: ScriptRunner?
+    private var _scriptRunner: (any ScriptRunnerProtocol)?
 
     private override init() {
         super.init()
@@ -28,13 +28,14 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         fflush(stdout)
     }
 
-    func setScriptRunner(_ runner: ScriptRunner) {
+    /// Sets the script runner - accepts protocol for DI/testing
+    func setScriptRunner(_ runner: any ScriptRunnerProtocol) {
         lock.lock()
         defer { lock.unlock() }
         self._scriptRunner = runner
     }
 
-    private var scriptRunner: ScriptRunner? {
+    private var scriptRunner: (any ScriptRunnerProtocol)? {
         lock.lock()
         defer { lock.unlock() }
         return _scriptRunner
@@ -550,7 +551,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         if let action = matchingAction {
             if action.type == "script", let path = action.path {
                 Log.info("Executing action script: \(path)")
-                scriptRunner?.runScript(at: path, withArgument: messageBody)
+                scriptRunner?.runScript(at: path, withArgument: messageBody, extraEnv: nil)
             } else if action.type == "view", let urlString = action.url, let url = URL(string: urlString) {
                 Log.info("Opening URL from config action: \(urlString)")
                 openUrlSecurely(url, forTopic: topic)
