@@ -118,11 +118,10 @@ On first launch, the app will automatically request notification permission.
 
 The app runs in the menu bar with options to:
 - **Server Status**: Shows connection state for each server (green=connected, red=disconnected, orange flashing=connecting)
-- **Config Warning**: Displays warnings for unknown keys or typos (orange indicator)
-- **Edit Config**: Open config file in your default editor
+- **Settings**: Open the Settings window to configure servers, topics, and local server (⌘,)
 - **Show Config in Finder**: Reveal config directory
-- **Reload Config**: Apply configuration changes
-- **View Logs**: Open log files (with automatic rotation)
+- **Reload Config**: Apply configuration changes (⌘R)
+- **View Logs**: Open log files (with automatic rotation) (⌘L)
 - **About**: Credits and links
 - **Quit**: Stop the service
 
