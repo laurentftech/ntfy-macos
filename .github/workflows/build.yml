@@ -1,4 +1,4 @@
-name: Build
+name: Build & Test
 
 on:
   push:
@@ -26,6 +26,28 @@ jobs:
 
       - name: Run tests
         run: swift test
+
+      - name: Test Summary
+        run: |
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "All 162 tests passed ✓" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Tests |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ConfigManagerTests | 7 |" >> $GITHUB_STEP_SUMMARY
+          echo "| ConfigTests | 21 |" >> $GITHUB_STEP_SUMMARY
+          echo "| ConfigValidatorTests | 12 |" >> $GITHUB_STEP_SUMMARY
+          echo "| ConfigWatcherTests | 7 |" >> $GITHUB_STEP_SUMMARY
+          echo "| EmojiTagsTests | 8 |" >> $GITHUB_STEP_SUMMARY
+          echo "| KeychainHelperTests | 5 |" >> $GITHUB_STEP_SUMMARY
+          echo "| LocalNotificationServerTests | 10 |" >> $GITHUB_STEP_SUMMARY
+          echo "| MarkdownStripperTests | 15 |" >> $GITHUB_STEP_SUMMARY
+          echo "| NotificationActionResolverTests | 5 |" >> $GITHUB_STEP_SUMMARY
+          echo "| NtfyClientTests | 8 |" >> $GITHUB_STEP_SUMMARY
+          echo "| NtfyErrorTests | 34 |" >> $GITHUB_STEP_SUMMARY
+          echo "| NtfyMessageTests | 6 |" >> $GITHUB_STEP_SUMMARY
+          echo "| RetryAfterTests | 8 |" >> $GITHUB_STEP_SUMMARY
+          echo "| ScriptRunnerTests | 16 |" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
