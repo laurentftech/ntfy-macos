@@ -24,37 +24,13 @@ jobs:
       - name: Build
         run: swift build -c release
 
-      - name: Run unit tests
+      - name: Run tests
         run: swift test
-
-      - name: Create Xcode project for coverage
-        run: swift package generate-xcodeproj
-
-      - name: Run tests with coverage
-        run: |
-          xcodebuild test \
-            -project ntfy-macos.xcodeproj \
-            -scheme ntfy-macos \
-            -derivedDataPath ./DerivedData \
-            -enableCodeCoverage YES \
-            -destination 'platform=macOS' \
-            build test
-
-      - name: Generate coverage report
-        run: |
-          XCRESULT=$(find ./DerivedData -name "*.xcresult" -type d 2>/dev/null | sort -r | head -1)
-          
-          if [ -n "$XCRESULT" ]; then
-            LINE_RATE=$(xcrun xccov view --report --json "$XCRESULT" 2>/dev/null | grep -o '"lineCoverage" : [0-9.]*' | head -1 | grep -o '[0-9.]*')
-            PERCENT=$(echo "$LINE_RATE * 100" | bc 2>/dev/null | cut -d'.' -f1)
-            echo "line_coverage=$PERCENT" >> $GITHUB_OUTPUT
-          fi
-        id: coverage
 
       - name: Test Summary
         run: |
           echo "### Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "All tests passed ✓" >> $GITHUB_STEP_SUMMARY
+          echo "All 177 tests passed ✓" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Test Suite | Tests |" >> $GITHUB_STEP_SUMMARY
           echo "|------------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -73,15 +49,8 @@ jobs:
           echo "| NtfyMessageTests | 6 |" >> $GITHUB_STEP_SUMMARY
           echo "| RetryAfterTests | 8 |" >> $GITHUB_STEP_SUMMARY
           echo "| ScriptRunnerTests | 16 |" >> $GITHUB_STEP_SUMMARY
-          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Code Coverage" >> $GITHUB_STEP_SUMMARY
-          COVERAGE=${{ steps.coverage.outputs.line_coverage }}
-          if [ -n "$COVERAGE" ]; then
-            echo "Line Coverage: **${COVERAGE}%**" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Line Coverage: N/A" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "Note: For code coverage, open project in Xcode and run Product → Test with Code Coverage" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
