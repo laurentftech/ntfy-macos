@@ -24,38 +24,34 @@ jobs:
       - name: Build
         run: swift build -c release
 
+      - name: Create Xcode project for testing
+        run: |
+          # Generate xcodeproj for coverage
+          swift package generate-xcodeproj
+
       - name: Run tests with coverage
         run: |
-          # Get llvm-cov path
-          LLVM_COV=$(xcrun -find llvm-cov)
-          echo "Using llvm-cov: $LLVM_COV"
+          # Run tests with code coverage using xcodebuild
+          xcodebuild test \
+            -project ntfy-macos.xcodeproj \
+            -scheme ntfy-macos \
+            -derivedDataPath ./DerivedData \
+            -enableCodeCoverage YES \
+            -destination 'platform=macOS' \
+            build test
+
+      - name: Generate coverage report
+        run: |
+          # Find the xcresult
+          XCRESULT=$(find ./DerivedData -name "*.xcresult" -type d 2>/dev/null | sort -r | head -1)
           
-          # Run tests with coverage (using profile data)
-          swift test --enable-code-coverage 2>/dev/null || true
-          
-          # Find the compiled module
-          MODULE_PATH=$(find .build -name "*.swiftmodule" -path "*/x86_64-apple-macos/debug/*" | head -1 | sed 's/\.swiftmodule$//')
-          echo "Module path: $MODULE_PATH"
-          
-          if [ -n "$MODULE_PATH" ] && [ -f "${MODULE_PATH}.profdata" ]; then
-            # Generate coverage report
-            $LLVM_COV report \
-              "$MODULE_PATH" \
-              -instr-profile="${MODULE_PATH}.profdata" \
-              --ignore-filename-regex=".build|Tests" \
-              --split-dwarfs-dir=.build \
-              2>/dev/null || true
-            
+          if [ -n "$XCRESULT" ]; then
             # Get line coverage percentage
-            LINE_RATE=$($LLVM_COV report \
-              "$MODULE_PATH" \
-              -instr-profile="${MODULE_PATH}.profdata" \
-              --ignore-filename-regex=".build|Tests" \
-              2>/dev/null | grep "TOTAL" | awk '{print $NF}' | sed 's/%//')
-            
-            echo "LINE_COVERAGE=$LINE_RATE" >> $GITHUB_OUTPUT
+            LINE_RATE=$(xcrun xccov view --report --json "$XCRESULT" 2>/dev/null | grep -o '"lineCoverage" : [0-9.]*' | head -1 | grep -o '[0-9.]*')
+            PERCENT=$(echo "$LINE_RATE * 100" | bc 2>/dev/null | cut -d'.' -f1)
+            echo "line_coverage=$PERCENT" >> $GITHUB_OUTPUT
+            echo "Coverage: ${PERCENT}%"
           fi
-        shell: bash
         id: coverage
 
       - name: Test Summary
@@ -82,11 +78,11 @@ jobs:
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Code Coverage" >> $GITHUB_STEP_SUMMARY
-          COVERAGE=${{ steps.coverage.outputs.LINE_COVERAGE }}
+          COVERAGE=${{ steps.coverage.outputs.line_coverage }}
           if [ -n "$COVERAGE" ]; then
             echo "Line Coverage: **${COVERAGE}%**" >> $GITHUB_STEP_SUMMARY
           else
-            echo "Line Coverage: Generating... (requires Xcode)" >> $GITHUB_STEP_SUMMARY
+            echo "Line Coverage: N/A" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Upload binary
