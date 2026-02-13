@@ -1,10 +1,12 @@
 # ntfy-macos
 
+[![Build & Test](https://github.com/laurentftech/ntfy-macos/actions/workflows/build.yml/badge.svg)](https://github.com/laurentftech/ntfy-macos/actions/workflows/build.yml)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/laurentftech)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-brightgreen.svg)](https://www.apple.com/macos/)
 [![Swift 6](https://img.shields.io/badge/Swift-6-orange.svg)](https://swift.org/)
 [![Homebrew](https://img.shields.io/badge/Homebrew-tap-brown.svg)](https://github.com/laurentftech/homebrew-ntfy-macos)
+[![Tests](https://img.shields.io/badge/Tests-162-brightgreen.svg)]()
 
 Receive push notifications on your Mac from any source — servers, IoT devices, home automation, CI pipelines, or custom scripts. No account required, works with the public [ntfy.sh](https://ntfy.sh) service or your own self-hosted server.
 
