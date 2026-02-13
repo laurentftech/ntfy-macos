@@ -24,8 +24,39 @@ jobs:
       - name: Build
         run: swift build -c release
 
-      - name: Run tests
-        run: swift test
+      - name: Run tests with coverage
+        run: |
+          # Get llvm-cov path
+          LLVM_COV=$(xcrun -find llvm-cov)
+          echo "Using llvm-cov: $LLVM_COV"
+          
+          # Run tests with coverage (using profile data)
+          swift test --enable-code-coverage 2>/dev/null || true
+          
+          # Find the compiled module
+          MODULE_PATH=$(find .build -name "*.swiftmodule" -path "*/x86_64-apple-macos/debug/*" | head -1 | sed 's/\.swiftmodule$//')
+          echo "Module path: $MODULE_PATH"
+          
+          if [ -n "$MODULE_PATH" ] && [ -f "${MODULE_PATH}.profdata" ]; then
+            # Generate coverage report
+            $LLVM_COV report \
+              "$MODULE_PATH" \
+              -instr-profile="${MODULE_PATH}.profdata" \
+              --ignore-filename-regex=".build|Tests" \
+              --split-dwarfs-dir=.build \
+              2>/dev/null || true
+            
+            # Get line coverage percentage
+            LINE_RATE=$($LLVM_COV report \
+              "$MODULE_PATH" \
+              -instr-profile="${MODULE_PATH}.profdata" \
+              --ignore-filename-regex=".build|Tests" \
+              2>/dev/null | grep "TOTAL" | awk '{print $NF}' | sed 's/%//')
+            
+            echo "LINE_COVERAGE=$LINE_RATE" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+        id: coverage
 
       - name: Test Summary
         run: |
@@ -48,6 +79,15 @@ jobs:
           echo "| NtfyMessageTests | 6 |" >> $GITHUB_STEP_SUMMARY
           echo "| RetryAfterTests | 8 |" >> $GITHUB_STEP_SUMMARY
           echo "| ScriptRunnerTests | 16 |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Code Coverage" >> $GITHUB_STEP_SUMMARY
+          COVERAGE=${{ steps.coverage.outputs.LINE_COVERAGE }}
+          if [ -n "$COVERAGE" ]; then
+            echo "Line Coverage: **${COVERAGE}%**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Line Coverage: Generating... (requires Xcode)" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

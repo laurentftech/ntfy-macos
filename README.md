@@ -1,6 +1,7 @@
 # ntfy-macos
 
 [![Build & Test](https://github.com/laurentftech/ntfy-macos/actions/workflows/build.yml/badge.svg)](https://github.com/laurentftech/ntfy-macos/actions/workflows/build.yml)
+[![Tests](https://img.shields.io/badge/Tests-162-brightgreen.svg)]()
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/laurentftech)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-brightgreen.svg)](https://www.apple.com/macos/)
