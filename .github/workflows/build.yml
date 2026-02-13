@@ -24,14 +24,14 @@ jobs:
       - name: Build
         run: swift build -c release
 
-      - name: Create Xcode project for testing
-        run: |
-          # Generate xcodeproj for coverage
-          swift package generate-xcodeproj
+      - name: Run unit tests
+        run: swift test
+
+      - name: Create Xcode project for coverage
+        run: swift package generate-xcodeproj
 
       - name: Run tests with coverage
         run: |
-          # Run tests with code coverage using xcodebuild
           xcodebuild test \
             -project ntfy-macos.xcodeproj \
             -scheme ntfy-macos \
@@ -42,22 +42,19 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          # Find the xcresult
           XCRESULT=$(find ./DerivedData -name "*.xcresult" -type d 2>/dev/null | sort -r | head -1)
           
           if [ -n "$XCRESULT" ]; then
-            # Get line coverage percentage
             LINE_RATE=$(xcrun xccov view --report --json "$XCRESULT" 2>/dev/null | grep -o '"lineCoverage" : [0-9.]*' | head -1 | grep -o '[0-9.]*')
             PERCENT=$(echo "$LINE_RATE * 100" | bc 2>/dev/null | cut -d'.' -f1)
             echo "line_coverage=$PERCENT" >> $GITHUB_OUTPUT
-            echo "Coverage: ${PERCENT}%"
           fi
         id: coverage
 
       - name: Test Summary
         run: |
           echo "### Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "All 162 tests passed ✓" >> $GITHUB_STEP_SUMMARY
+          echo "All tests passed ✓" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Test Suite | Tests |" >> $GITHUB_STEP_SUMMARY
           echo "|------------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -72,6 +69,7 @@ jobs:
           echo "| NotificationActionResolverTests | 5 |" >> $GITHUB_STEP_SUMMARY
           echo "| NtfyClientTests | 8 |" >> $GITHUB_STEP_SUMMARY
           echo "| NtfyErrorTests | 34 |" >> $GITHUB_STEP_SUMMARY
+          echo "| NtfyIntegrationTests | 15 |" >> $GITHUB_STEP_SUMMARY
           echo "| NtfyMessageTests | 6 |" >> $GITHUB_STEP_SUMMARY
           echo "| RetryAfterTests | 8 |" >> $GITHUB_STEP_SUMMARY
           echo "| ScriptRunnerTests | 16 |" >> $GITHUB_STEP_SUMMARY
