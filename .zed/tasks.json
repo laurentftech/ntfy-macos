@@ -1,0 +1,34 @@
+[
+  {
+    "label": "Make: build",
+    "command": "make build"
+  },
+  {
+    "label": "Make: run",
+    "command": "make run"
+  },
+  {
+    "label": "Make: test",
+    "command": "make test"
+  },
+  {
+    "label": "Make: clean",
+    "command": "make clean"
+  },
+  {
+    "label": "Make: open-xcode",
+    "command": "make open-xcode"
+  },
+  {
+    "label": "SwiftPM: build",
+    "command": "swift build"
+  },
+  {
+    "label": "SwiftPM: run",
+    "command": "swift run ntfy-macos"
+  },
+  {
+    "label": "SwiftPM: test",
+    "command": "swift test"
+  }
+]

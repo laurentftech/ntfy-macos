@@ -1,0 +1,25 @@
+{
+  "name": "ntfy-macos (Zed Workspace)",
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "tasksFile": ".zed/tasks.json",
+  "editor": {
+    "exclude": [
+      ".build",
+      "Build",
+      "DerivedData",
+      "xcuserdata",
+      "xcshareddata",
+      "Pods",
+      "Carthage",
+      ".DS_Store"
+    ]
+  },
+  "metadata": {
+    "generatedBy": "assistant",
+    "purpose": "Non-invasive workspace metadata for Zed. Does not modify source files or build configuration."
+  }
+}

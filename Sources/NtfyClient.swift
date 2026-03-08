@@ -102,6 +102,11 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private var lastMessageTime: Int  // Track last message timestamp for fetch_missed
     private let lastMessageTimeKey: String  // UserDefaults key for persistence
 
+    // Watchdog: reconnect if no data received for this long (ntfy sends keepalives every ~55s)
+    private let watchdogInterval: TimeInterval = 120.0
+    private var watchdogTimer: Timer?
+    private var lastDataReceived: Date = .distantPast
+
     init(serverURL: String, topics: [String], authToken: String? = nil, fetchMissed: Bool = false) {
         self.serverURL = serverURL
         self.topics = topics
@@ -186,10 +191,32 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         shouldReconnect = false
         reconnectTimer?.invalidate()
         reconnectTimer = nil
+        stopWatchdog()
         dataTask?.cancel()
         dataTask = nil
         isConnecting = false
         buffer.removeAll()
+    }
+
+    private func startWatchdog() {
+        stopWatchdog()
+        lastDataReceived = Date()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.watchdogTimer = Timer.scheduledTimer(withTimeInterval: self.watchdogInterval, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                let elapsed = Date().timeIntervalSince(self.lastDataReceived)
+                if elapsed >= self.watchdogInterval {
+                    Log.info("Watchdog: no data received for \(Int(elapsed))s, reconnecting...")
+                    self.reconnect()
+                }
+            }
+        }
+    }
+
+    private func stopWatchdog() {
+        watchdogTimer?.invalidate()
+        watchdogTimer = nil
     }
 
     func updateAuthToken(_ token: String?) {
@@ -307,6 +334,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
 
 extension NtfyClient: URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lastDataReceived = Date()
         buffer.append(data)
 
         while let newlineRange = buffer.range(of: Data("\n".utf8)) {
@@ -321,6 +349,7 @@ extension NtfyClient: URLSessionDataDelegate {
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         isConnecting = false
+        stopWatchdog()
 
         if let error = error {
             // Don't log cancelled errors (normal during reconnect)
@@ -353,6 +382,7 @@ extension NtfyClient: URLSessionDataDelegate {
         if httpResponse.statusCode == 200 {
             isConnecting = false
             reconnectAttempts = 0
+            startWatchdog()
             callDelegate { delegate in
                 delegate.ntfyClientDidConnect(self)
             }

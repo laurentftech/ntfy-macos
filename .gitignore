@@ -49,3 +49,6 @@ ntfy-mac.code-workspace
 _bmad/
 _bmad-output/
 DerivedData/
+
+# spec-gen analysis artifacts
+.spec-gen/
