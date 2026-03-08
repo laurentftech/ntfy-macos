@@ -93,7 +93,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
 
     private var reconnectAttempts = 0
     private let maxReconnectAttempts = 10
-    private let baseReconnectDelay: TimeInterval = 2.0
+    private let baseReconnectDelay: TimeInterval
     private let maxReconnectDelay: TimeInterval = 300.0  // 5 minutes max
     private var reconnectTimer: Timer?
     private var isConnecting = false
@@ -103,15 +103,17 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private let lastMessageTimeKey: String  // UserDefaults key for persistence
 
     // Watchdog: reconnect if no data received for this long (ntfy sends keepalives every ~55s)
-    private let watchdogInterval: TimeInterval = 120.0
+    private let watchdogInterval: TimeInterval
     private var watchdogTimer: Timer?
     private var lastDataReceived: Date = .distantPast
 
-    init(serverURL: String, topics: [String], authToken: String? = nil, fetchMissed: Bool = false) {
+    init(serverURL: String, topics: [String], authToken: String? = nil, fetchMissed: Bool = false, watchdogInterval: TimeInterval = 120.0, baseReconnectDelay: TimeInterval = 2.0, urlSessionConfiguration: URLSessionConfiguration? = nil) {
         self.serverURL = serverURL
         self.topics = topics
         self._authToken = authToken
         self.fetchMissed = fetchMissed
+        self.watchdogInterval = watchdogInterval
+        self.baseReconnectDelay = baseReconnectDelay
 
         // Restore last message time from UserDefaults for fetch_missed
         let topicsKey = topics.sorted().joined(separator: ",")
@@ -125,7 +127,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
 
         super.init()
 
-        let config = URLSessionConfiguration.default
+        let config = urlSessionConfiguration ?? URLSessionConfiguration.default
         config.timeoutIntervalForRequest = .infinity
         config.timeoutIntervalForResource = .infinity
         config.httpMaximumConnectionsPerHost = 1
@@ -352,11 +354,12 @@ extension NtfyClient: URLSessionDataDelegate {
         stopWatchdog()
 
         if let error = error {
-            // Don't log cancelled errors (normal during reconnect)
             let nsError = error as NSError
-            if nsError.domain != NSURLErrorDomain || nsError.code != NSURLErrorCancelled {
-                Log.error("Connection error: \(error.localizedDescription)")
+            // Cancelled errors are expected when we cancel the task ourselves (reconnect/disconnect) — ignore them
+            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                return
             }
+            Log.error("Connection error: \(error.localizedDescription)")
             callDelegate { delegate in
                 delegate.ntfyClient(self, didEncounterError: error)
                 delegate.ntfyClientDidDisconnect(self)
