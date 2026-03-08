@@ -264,14 +264,13 @@ final class NtfyClient: NSObject, @unchecked Sendable {
                 }
             }
         } else {
-            Log.error("Max reconnection attempts reached. Please restart the service.")
-            let error = NSError(
-                domain: "NtfyClient",
-                code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "Max reconnection attempts reached"]
-            )
-            callDelegate { delegate in
-                delegate.ntfyClient(self, didEncounterError: error)
+            // Max attempts reached — schedule a last-resort retry every 5 minutes indefinitely
+            Log.error("Max reconnection attempts reached. Retrying every 5 minutes...")
+            reconnectAttempts = 0  // Reset so next success resets state correctly
+            DispatchQueue.main.async { [weak self] in
+                self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: false) { [weak self] _ in
+                    self?.connect()
+                }
             }
         }
     }

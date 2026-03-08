@@ -24,8 +24,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
     /// Clears all notification categories to remove stale actions
     func clearCategories() {
         center.setNotificationCategories([])
-        print("Cleared notification categories")
-        fflush(stdout)
+        Log.info("Cleared notification categories")
     }
 
     /// Sets the script runner - accepts protocol for DI/testing
@@ -98,17 +97,10 @@ final class NotificationManager: NSObject, @unchecked Sendable {
 
     /// Displays a notification based on an ntfy message and topic configuration
     func showNotification(for message: NtfyMessage, topicConfig: TopicConfig?) {
-        print("showNotification called for topic: \(message.topic)")
-        fflush(stdout)
-
         guard let topicConfig = topicConfig else {
-            print("No topicConfig, using basic notification")
-            fflush(stdout)
             showBasicNotification(for: message)
             return
         }
-
-        print("Using topicConfig for notification")
 
         // Skip notification if silent mode is enabled
         if topicConfig.silent == true {
@@ -137,16 +129,8 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             }
         }
 
-        // Add icon attachment
-        print("Creating icon attachment for topic config: iconPath=\(topicConfig.iconPath ?? "nil"), iconSymbol=\(topicConfig.iconSymbol ?? "nil")")
-        fflush(stdout)
         if let attachment = createIconAttachment(from: topicConfig) {
-            print("Attachment created, adding to notification")
-            fflush(stdout)
             content.attachments = [attachment]
-        } else {
-            print("No attachment created")
-            fflush(stdout)
         }
 
         // Store message body and actions for handling
@@ -198,8 +182,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             let categoryId = "topic-\(message.topic)-actions"
             registerCategory(categoryId: categoryId, actions: actions)
             content.categoryIdentifier = categoryId
-            print("Using \(actions.count) actions from config (overriding message actions)")
-            fflush(stdout)
+            Log.info("Using \(actions.count) actions from config for topic \(message.topic)")
         } else if let messageActions = message.actions, !messageActions.isEmpty {
             // No config actions - use message actions
             let categoryId = "msg-\(message.id)-actions"
@@ -236,8 +219,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             userInfo["actionUrls"] = actionUrls
             userInfo["actionTypes"] = actionTypes
             userInfo["actionDetailsJson"] = actionDetailsJson
-            print("Registered \(messageActions.count) actions from message")
-            fflush(stdout)
+            Log.info("Using \(messageActions.count) actions from message for topic \(message.topic)")
         }
 
         content.userInfo = userInfo
@@ -246,15 +228,10 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         let identifier = UUID().uuidString
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
 
-        print("Adding notification to center...")
-        fflush(stdout)
         center.add(request) { error in
             if let error = error {
-                print("Failed to show notification: \(error)")
-            } else {
-                print("✅ Notification added successfully")
+                Log.error("Failed to show notification: \(error)")
             }
-            fflush(stdout)
         }
     }
 
@@ -289,20 +266,12 @@ final class NotificationManager: NSObject, @unchecked Sendable {
 
         // Try local file path
         if let iconPath = topicConfig.iconPath {
-            print("Trying icon path: \(iconPath)")
-            fflush(stdout)
             let url = URL(fileURLWithPath: iconPath)
             if FileManager.default.fileExists(atPath: iconPath) {
-                print("Icon file exists")
-                fflush(stdout)
                 do {
-                    let attachment = try UNNotificationAttachment(identifier: UUID().uuidString, url: url, options: nil)
-                    print("Icon attachment created successfully")
-                    fflush(stdout)
-                    return attachment
+                    return try UNNotificationAttachment(identifier: UUID().uuidString, url: url, options: nil)
                 } catch {
-                    print("Failed to create attachment: \(error)")
-                    fflush(stdout)
+                    Log.error("Failed to create icon attachment from path \(iconPath): \(error)")
                 }
             }
         }
@@ -331,9 +300,12 @@ final class NotificationManager: NSObject, @unchecked Sendable {
 
         do {
             try pngData.write(to: fileURL)
-            return try UNNotificationAttachment(identifier: UUID().uuidString, url: fileURL, options: nil)
+            let attachment = try UNNotificationAttachment(identifier: UUID().uuidString, url: fileURL, options: nil)
+            try? FileManager.default.removeItem(at: fileURL)
+            return attachment
         } catch {
-            print("Failed to create attachment: \(error)")
+            Log.error("Failed to write SF Symbol attachment: \(error)")
+            try? FileManager.default.removeItem(at: fileURL)
             return nil
         }
     }
@@ -382,7 +354,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         )
 
         center.getNotificationCategories { existingCategories in
-            var categories = existingCategories
+            var categories = existingCategories.filter { $0.identifier != categoryId }
             categories.insert(category)
             self.center.setNotificationCategories(categories)
         }
@@ -458,9 +430,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
 
         center.add(request) { error in
             if let error = error {
-                print("Failed to show test notification: \(error)")
-            } else {
-                print("Test notification sent successfully")
+                Log.error("Failed to show test notification: \(error)")
             }
         }
     }
@@ -491,6 +461,9 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
             handleActionResponse(response, messageBody: messageBody, topic: topic)
         }
 
+        // Clear badge when user interacts with a notification
+        center.setBadgeCount(0) { _ in }
+
         completionHandler()
     }
 
@@ -505,8 +478,6 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         // If custom URL, use it directly; otherwise append topic to server URL
         let webUrlString = isCustomClickUrl ? serverUrl : "\(serverUrl)/\(topic)"
         if let url = URL(string: webUrlString) {
-            print("Opening notification in web: \(webUrlString)")
-            fflush(stdout)
             openUrlSecurely(url, forTopic: topic)
         }
     }
