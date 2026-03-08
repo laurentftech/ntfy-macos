@@ -27,11 +27,12 @@ class StatusBarController: NSObject {
         let topics: [String]
         var isConnected: Bool
         var hasEverConnected: Bool  // Track if we've ever successfully connected
+        var hasFailedAttempt: Bool = false  // Track if at least one attempt ended in failure
 
         var state: ConnectionState {
             if isConnected {
                 return .connected
-            } else if hasEverConnected {
+            } else if hasEverConnected || hasFailedAttempt {
                 return .disconnected
             } else {
                 return .connecting
@@ -318,6 +319,8 @@ class StatusBarController: NSObject {
             status.isConnected = connected
             if connected {
                 status.hasEverConnected = true
+            } else {
+                status.hasFailedAttempt = true
             }
             serverStatuses[serverUrl] = status
             refreshServersSubmenu()
@@ -366,12 +369,22 @@ class StatusBarController: NSObject {
         refreshServersSubmenu()
     }
 
+    private func updateMenuBarIcon(hasDisconnected: Bool) {
+        let symbolName = hasDisconnected ? "bell" : "bell.fill"
+        if let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "ntfy") {
+            image.isTemplate = true
+            statusItem?.button?.image = image
+        }
+    }
+
     private func refreshMainStatus() {
         let totalServers = serverStatuses.count
         let connectedServers = serverStatuses.values.filter { $0.state == .connected }.count
         let connectingServers = serverStatuses.values.filter { $0.state == .connecting }.count
         let disconnectedServers = serverStatuses.values.filter { $0.state == .disconnected }.count
         let totalTopics = serverStatuses.values.flatMap { $0.topics }.count
+
+        updateMenuBarIcon(hasDisconnected: disconnectedServers > 0)
 
         let attributedTitle = NSMutableAttributedString()
         let textAttrs: [NSAttributedString.Key: Any] = [

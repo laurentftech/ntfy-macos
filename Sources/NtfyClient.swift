@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 @preconcurrency protocol NtfyClientDelegate: AnyObject {
     func ntfyClient(_ client: NtfyClient, didReceiveMessage message: NtfyMessage)
@@ -107,6 +108,10 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private var watchdogTimer: Timer?
     private var lastDataReceived: Date = .distantPast
 
+    // Network path monitor: reconnect immediately when network becomes available
+    private var pathMonitor: NWPathMonitor?
+    private var isPathSatisfied = true  // Assume connected initially
+
     init(serverURL: String, topics: [String], authToken: String? = nil, fetchMissed: Bool = false, watchdogInterval: TimeInterval = 120.0, baseReconnectDelay: TimeInterval = 2.0, urlSessionConfiguration: URLSessionConfiguration? = nil) {
         self.serverURL = serverURL
         self.topics = topics
@@ -182,6 +187,8 @@ final class NtfyClient: NSObject, @unchecked Sendable {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
+        startPathMonitor()
+
         buffer.removeAll()
         dataTask = session.dataTask(with: request)
         dataTask?.resume()
@@ -194,6 +201,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         reconnectTimer?.invalidate()
         reconnectTimer = nil
         stopWatchdog()
+        stopPathMonitor()
         dataTask?.cancel()
         dataTask = nil
         isConnecting = false
@@ -219,6 +227,28 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private func stopWatchdog() {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
+    }
+
+    private func startPathMonitor() {
+        guard pathMonitor == nil else { return }
+        let monitor = NWPathMonitor()
+        pathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            let satisfied = path.status == .satisfied
+            if satisfied && !self.isPathSatisfied {
+                Log.info("Network became available, reconnecting...")
+                self.reconnect()
+            }
+            self.isPathSatisfied = satisfied
+        }
+        monitor.start(queue: .global(qos: .background))
+    }
+
+    private func stopPathMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        isPathSatisfied = true
     }
 
     func updateAuthToken(_ token: String?) {
