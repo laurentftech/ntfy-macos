@@ -13,8 +13,11 @@ enum Log {
         isatty(STDOUT_FILENO) != 0
     }()
 
-    /// Log directory
+    /// Log directory (a temporary one under XCTest, so test runs don't write to the user's log)
     static let logDirectory: String = {
+        if NSClassFromString("XCTestCase") != nil {
+            return (NSTemporaryDirectory() as NSString).appendingPathComponent("ntfy-macos-tests/logs")
+        }
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
         return homeDir.appendingPathComponent(".local/share/ntfy-macos/logs").path
     }()

@@ -65,29 +65,25 @@ struct NtfyMessage: Codable {
     }
 }
 
+/// Streams messages from an ntfy server and reconnects on failure.
+///
+/// All mutable state is confined to `queue`: URLSession callbacks, timers and the
+/// network path monitor all run there, and the public entry points hop onto it.
+/// Callbacks from a task that is no longer the current `dataTask` are ignored, so a
+/// cancelled or replaced subscription can never reset state or deliver messages.
 final class NtfyClient: NSObject, @unchecked Sendable {
     private let serverURL: String
     private let topics: [String]
     private let fetchMissed: Bool
-    private let lock = NSLock()
-    private var _authToken: String?
-
-    private var authToken: String? {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            return _authToken
-        }
-        set {
-            lock.lock()
-            defer { lock.unlock() }
-            _authToken = newValue
-        }
-    }
+    private var authToken: String?
 
     weak var delegate: NtfyClientDelegate?
 
-    private var session: URLSession!
+    private let queue = DispatchQueue(label: "com.ntfy-macos.client")
+    // URLSession retains its delegate, so the session is invalidated on disconnect
+    // (letting the client deallocate) and recreated on the next connect.
+    private let sessionConfiguration: URLSessionConfiguration
+    private var session: URLSession?
     private let delegateQueue: OperationQueue
     private var dataTask: URLSessionDataTask?
     private var buffer = Data()
@@ -96,16 +92,24 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     private let maxReconnectAttempts = 10
     private let baseReconnectDelay: TimeInterval
     private let maxReconnectDelay: TimeInterval = 300.0  // 5 minutes max
-    private var reconnectTimer: Timer?
-    private var isConnecting = false
+    private var reconnectTimer: DispatchSourceTimer?
     private var shouldReconnect = true
     private var retryAfterDelay: TimeInterval?  // From Retry-After header
-    private var lastMessageTime: Int  // Track last message timestamp for fetch_missed
-    private let lastMessageTimeKey: String  // UserDefaults key for persistence
+
+    // fetch_missed state: the last message seen, persisted so reconnects resume after it
+    private var lastMessageTime: Int
+    private var lastMessageId: String?
+    private let lastMessageTimeKey: String
+    private let lastMessageIdKey: String
+
+    // Recently delivered message IDs, so a message replayed by the server is shown once
+    private var recentMessageIds: [String] = []
+    private var recentMessageIdSet: Set<String> = []
+    private let maxRecentMessageIds = 500
 
     // Watchdog: reconnect if no data received for this long (ntfy sends keepalives every ~55s)
     private let watchdogInterval: TimeInterval
-    private var watchdogTimer: Timer?
+    private var watchdogTimer: DispatchSourceTimer?
     private var lastDataReceived: Date = .distantPast
 
     // Network path monitor: reconnect immediately when network becomes available
@@ -115,32 +119,39 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     init(serverURL: String, topics: [String], authToken: String? = nil, fetchMissed: Bool = false, watchdogInterval: TimeInterval = 120.0, baseReconnectDelay: TimeInterval = 2.0, urlSessionConfiguration: URLSessionConfiguration? = nil) {
         self.serverURL = serverURL
         self.topics = topics
-        self._authToken = authToken
+        self.authToken = authToken
         self.fetchMissed = fetchMissed
         self.watchdogInterval = watchdogInterval
         self.baseReconnectDelay = baseReconnectDelay
 
-        // Restore last message time from UserDefaults for fetch_missed
+        // Restore the last message seen from UserDefaults for fetch_missed
         let topicsKey = topics.sorted().joined(separator: ",")
         self.lastMessageTimeKey = "lastMessageTime-\(serverURL)-\(topicsKey)"
+        self.lastMessageIdKey = "lastMessageId-\(serverURL)-\(topicsKey)"
         self.lastMessageTime = UserDefaults.standard.integer(forKey: lastMessageTimeKey)
+        self.lastMessageId = UserDefaults.standard.string(forKey: lastMessageIdKey)
 
-        // Create a dedicated serial queue for URLSession callbacks
+        // URLSession callbacks run on the same serial queue as everything else
         self.delegateQueue = OperationQueue()
         self.delegateQueue.maxConcurrentOperationCount = 1
         self.delegateQueue.name = "com.ntfy-macos.urlsession"
-
-        super.init()
+        self.delegateQueue.underlyingQueue = queue
 
         let config = urlSessionConfiguration ?? URLSessionConfiguration.default
         config.timeoutIntervalForRequest = .infinity
         config.timeoutIntervalForResource = .infinity
         config.httpMaximumConnectionsPerHost = 1
-        self.session = URLSession(configuration: config, delegate: self, delegateQueue: delegateQueue)
+        self.sessionConfiguration = config
+
+        super.init()
     }
 
     deinit {
-        disconnect()
+        // Can't hop onto the queue from deinit; these cancels are thread-safe.
+        reconnectTimer?.cancel()
+        watchdogTimer?.cancel()
+        pathMonitor?.cancel()
+        dataTask?.cancel()
     }
 
     // Thread-safe delegate call helper
@@ -152,21 +163,61 @@ final class NtfyClient: NSObject, @unchecked Sendable {
     }
 
     func connect() {
-        guard !isConnecting else { return }
-        isConnecting = true
+        queue.async { [weak self] in
+            guard let self, self.dataTask == nil else { return }
+            self.shouldReconnect = true
+            self.startConnection()
+        }
+    }
+
+    func disconnect() {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.shouldReconnect = false
+            self.cancelReconnectTimer()
+            self.stopWatchdog()
+            self.stopPathMonitor()
+            self.dataTask?.cancel()
+            self.dataTask = nil
+            self.buffer.removeAll()
+            self.session?.invalidateAndCancel()
+            self.session = nil
+        }
+    }
+
+    func updateAuthToken(_ token: String?) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.authToken = token
+            if self.dataTask != nil {
+                self.reconnect()
+            }
+        }
+    }
+
+    /// Forces a reconnect as if the watchdog fired. Internal for testing.
+    func triggerReconnect() {
+        queue.async { [weak self] in
+            self?.reconnect()
+        }
+    }
+
+    /// Starts a new subscription, replacing any existing one. Must run on `queue`.
+    private func startConnection() {
+        guard shouldReconnect else { return }
 
         let topicsString = topics.joined(separator: ",")
-        guard var components = URLComponents(string: serverURL) else {
-            isConnecting = false
-            return
-        }
+        guard var components = URLComponents(string: serverURL) else { return }
 
         components.path = "/\(topicsString)/json"
 
         // Add since parameter to fetch missed messages when enabled
         if fetchMissed {
-            if lastMessageTime > 0 {
-                // Reconnect: only fetch messages since the last one we received
+            if let lastMessageId {
+                // Reconnect: `since=<id>` is exclusive, so the last message isn't replayed
+                components.queryItems = [URLQueryItem(name: "since", value: lastMessageId)]
+            } else if lastMessageTime > 0 {
+                // Only a timestamp persisted by an older version is available
                 components.queryItems = [URLQueryItem(name: "since", value: String(lastMessageTime))]
             } else {
                 // First connect: fetch all cached messages
@@ -174,10 +225,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
             }
         }
 
-        guard let url = components.url else {
-            isConnecting = false
-            return
-        }
+        guard let url = components.url else { return }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -189,43 +237,38 @@ final class NtfyClient: NSObject, @unchecked Sendable {
 
         startPathMonitor()
 
+        // Never leave a previous subscription streaming alongside the new one
+        cancelReconnectTimer()
+        stopWatchdog()
+        dataTask?.cancel()
         buffer.removeAll()
+        let session = self.session ?? URLSession(configuration: sessionConfiguration, delegate: self, delegateQueue: delegateQueue)
+        self.session = session
         dataTask = session.dataTask(with: request)
         dataTask?.resume()
 
         Log.info("Connecting to ntfy: \(url.absoluteString)")
     }
 
-    func disconnect() {
-        shouldReconnect = false
-        reconnectTimer?.invalidate()
-        reconnectTimer = nil
-        stopWatchdog()
-        stopPathMonitor()
-        dataTask?.cancel()
-        dataTask = nil
-        isConnecting = false
-        buffer.removeAll()
-    }
-
     private func startWatchdog() {
         stopWatchdog()
         lastDataReceived = Date()
-        DispatchQueue.main.async { [weak self] in
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + watchdogInterval, repeating: watchdogInterval)
+        timer.setEventHandler { [weak self] in
             guard let self else { return }
-            self.watchdogTimer = Timer.scheduledTimer(withTimeInterval: self.watchdogInterval, repeats: true) { [weak self] _ in
-                guard let self else { return }
-                let elapsed = Date().timeIntervalSince(self.lastDataReceived)
-                if elapsed >= self.watchdogInterval {
-                    Log.info("Watchdog: no data received for \(Int(elapsed))s, reconnecting...")
-                    self.reconnect()
-                }
+            let elapsed = Date().timeIntervalSince(self.lastDataReceived)
+            if elapsed >= self.watchdogInterval {
+                Log.info("Watchdog: no data received for \(Int(elapsed))s, reconnecting...")
+                self.reconnect()
             }
         }
+        watchdogTimer = timer
+        timer.resume()
     }
 
     private func stopWatchdog() {
-        watchdogTimer?.invalidate()
+        watchdogTimer?.cancel()
         watchdogTimer = nil
     }
 
@@ -233,8 +276,8 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         guard pathMonitor == nil else { return }
         let monitor = NWPathMonitor()
         pathMonitor = monitor
-        monitor.pathUpdateHandler = { [weak self] path in
-            guard let self else { return }
+        monitor.pathUpdateHandler = { [weak self, weak monitor] path in
+            guard let self, let monitor, self.pathMonitor === monitor else { return }
             let satisfied = path.status == .satisfied
             if satisfied && !self.isPathSatisfied {
                 Log.info("Network became available, reconnecting...")
@@ -242,7 +285,7 @@ final class NtfyClient: NSObject, @unchecked Sendable {
             }
             self.isPathSatisfied = satisfied
         }
-        monitor.start(queue: .global(qos: .background))
+        monitor.start(queue: queue)
     }
 
     private func stopPathMonitor() {
@@ -251,19 +294,19 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         isPathSatisfied = true
     }
 
-    func updateAuthToken(_ token: String?) {
-        self.authToken = token
-        if dataTask != nil {
-            reconnect()
-        }
+    private func cancelReconnectTimer() {
+        reconnectTimer?.cancel()
+        reconnectTimer = nil
     }
 
+    /// Tears down the current subscription and schedules a new one. Must run on `queue`.
     private func reconnect() {
         guard shouldReconnect else { return }
 
         dataTask?.cancel()
         dataTask = nil
-        isConnecting = false
+        stopWatchdog()
+        buffer.removeAll()
 
         // Calculate delay with exponential backoff
         var delay: TimeInterval
@@ -286,23 +329,24 @@ final class NtfyClient: NSObject, @unchecked Sendable {
 
         if reconnectAttempts <= maxReconnectAttempts {
             Log.info("Reconnecting in \(String(format: "%.1f", delay)) seconds (attempt \(reconnectAttempts)/\(maxReconnectAttempts))...")
-
-            // Schedule timer on main thread to ensure RunLoop is active
-            DispatchQueue.main.async { [weak self] in
-                self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-                    self?.connect()
-                }
-            }
         } else {
             // Max attempts reached — schedule a last-resort retry every 5 minutes indefinitely
             Log.error("Max reconnection attempts reached. Retrying every 5 minutes...")
             reconnectAttempts = 0  // Reset so next success resets state correctly
-            DispatchQueue.main.async { [weak self] in
-                self?.reconnectTimer = Timer.scheduledTimer(withTimeInterval: 300.0, repeats: false) { [weak self] _ in
-                    self?.connect()
-                }
-            }
+            delay = 300.0
         }
+
+        // Replace any pending reconnect so only one is ever outstanding
+        cancelReconnectTimer()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + max(delay, 0))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.reconnectTimer = nil
+            self.startConnection()
+        }
+        reconnectTimer = timer
+        timer.resume()
     }
 
     /// Parse Retry-After header value (can be seconds or HTTP date)
@@ -337,6 +381,16 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         return 30.0
     }
 
+    /// Records a message ID; returns false if it was already delivered recently.
+    private func rememberMessageId(_ id: String) -> Bool {
+        guard recentMessageIdSet.insert(id).inserted else { return false }
+        recentMessageIds.append(id)
+        if recentMessageIds.count > maxRecentMessageIds {
+            recentMessageIdSet.remove(recentMessageIds.removeFirst())
+        }
+        return true
+    }
+
     private func processLine(_ line: String) {
         guard !line.isEmpty else { return }
 
@@ -344,18 +398,29 @@ final class NtfyClient: NSObject, @unchecked Sendable {
             let data = Data(line.utf8)
             let message = try JSONDecoder().decode(NtfyMessage.self, from: data)
 
-            // Track latest message time for fetch_missed reconnects
-            if message.time > lastMessageTime {
+            guard message.event == "message" else { return }
+
+            // A message ID unknown to the server makes `since=<id>` return the whole
+            // cache, so drop anything older than what was already seen.
+            if fetchMissed && message.time < lastMessageTime {
+                return
+            }
+            guard rememberMessageId(message.id) else {
+                return
+            }
+
+            // Track the latest message for fetch_missed reconnects
+            if message.time >= lastMessageTime {
                 lastMessageTime = message.time
+                lastMessageId = message.id
                 if fetchMissed {
                     UserDefaults.standard.set(lastMessageTime, forKey: lastMessageTimeKey)
+                    UserDefaults.standard.set(message.id, forKey: lastMessageIdKey)
                 }
             }
 
-            if message.event == "message" {
-                callDelegate { delegate in
-                    delegate.ntfyClient(self, didReceiveMessage: message)
-                }
+            callDelegate { delegate in
+                delegate.ntfyClient(self, didReceiveMessage: message)
             }
         } catch {
             Log.error("Failed to decode message: \(error)")
@@ -365,6 +430,8 @@ final class NtfyClient: NSObject, @unchecked Sendable {
 
 extension NtfyClient: URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard dataTask === self.dataTask else { return }
+
         lastDataReceived = Date()
         buffer.append(data)
 
@@ -379,40 +446,34 @@ extension NtfyClient: URLSessionDataDelegate {
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        isConnecting = false
+        // A cancelled or replaced task must not touch the current subscription's state
+        guard task === self.dataTask else { return }
+
+        dataTask = nil
         stopWatchdog()
 
         if let error = error {
-            let nsError = error as NSError
-            // Cancelled errors are expected when we cancel the task ourselves (reconnect/disconnect) — ignore them
-            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
-                return
-            }
             Log.error("Connection error: \(error.localizedDescription)")
             callDelegate { delegate in
                 delegate.ntfyClient(self, didEncounterError: error)
                 delegate.ntfyClientDidDisconnect(self)
             }
-            reconnect()
         } else {
             Log.info("Connection closed by server")
             callDelegate { delegate in
                 delegate.ntfyClientDidDisconnect(self)
             }
-            if shouldReconnect {
-                reconnect()
-            }
         }
+        reconnect()
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        guard let httpResponse = response as? HTTPURLResponse else {
+        guard dataTask === self.dataTask, let httpResponse = response as? HTTPURLResponse else {
             completionHandler(.cancel)
             return
         }
 
         if httpResponse.statusCode == 200 {
-            isConnecting = false
             reconnectAttempts = 0
             startWatchdog()
             callDelegate { delegate in
@@ -433,6 +494,11 @@ extension NtfyClient: URLSessionDataDelegate {
             }
 
             completionHandler(.cancel)
+            // The cancelled task's completion is ignored, so schedule the retry here
+            callDelegate { delegate in
+                delegate.ntfyClientDidDisconnect(self)
+            }
+            reconnect()
         }
     }
 }
