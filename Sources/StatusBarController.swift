@@ -326,25 +326,69 @@ class StatusBarController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "ntfy-macos \(update.version) is available"
-        alert.informativeText = "You have \(AppConstants.effectiveVersion). To update with Homebrew, run:\n\n\(UpdateChecker.upgradeCommand)"
+        alert.informativeText = "You have \(AppConstants.effectiveVersion). To update with Homebrew, run:"
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Copy Command")
-        alert.addButton(withTitle: "Release Notes")
-        alert.addButton(withTitle: "Later")
-
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(UpdateChecker.upgradeCommand, forType: .string)
-        case .alertSecondButtonReturn:
-            if let url = URL(string: update.releaseURL) {
-                NSWorkspace.shared.open(url)
-            }
-        default:
-            break
-        }
+        alert.accessoryView = makeUpgradeCommandView()
+        alert.addButton(withTitle: "Close")
+        alert.runModal()
         // Re-apply accessory policy to prevent Dock icon from lingering
         NSApp.setActivationPolicy(.accessory)
+    }
+
+    /// Selectable command plus Copy / Release Notes buttons that keep the alert open
+    private func makeUpgradeCommandView() -> NSView {
+        let width: CGFloat = 260
+
+        // One command per line for readability; Copy still puts the single-line form on the pasteboard
+        let displayedCommand = UpdateChecker.upgradeCommand.replacingOccurrences(of: " && ", with: " &&\n")
+        let commandField = NSTextField(wrappingLabelWithString: displayedCommand)
+        commandField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        commandField.alignment = .center
+        commandField.isSelectable = true
+        commandField.preferredMaxLayoutWidth = width
+
+        let copyButton = NSButton(title: "Copy", target: self, action: #selector(copyUpgradeCommand(_:)))
+        copyButton.bezelStyle = .rounded
+
+        let releaseNotesButton = NSButton(title: "Release Notes", target: self, action: #selector(openReleaseNotes))
+        releaseNotesButton.bezelStyle = .rounded
+
+        let buttons = NSStackView(views: [copyButton, releaseNotesButton])
+        buttons.orientation = .horizontal
+        buttons.spacing = 8
+
+        let stack = NSStackView(views: [commandField, buttons])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+
+        // NSAlert shrinks a bare stack view to its fitting width and pins it left;
+        // a fixed-width container keeps it centered under the alert text
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: stack.fittingSize.height))
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            stack.topAnchor.constraint(equalTo: container.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        return container
+    }
+
+    @objc private func openReleaseNotes() {
+        guard let urlString = availableUpdate?.releaseURL, let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func copyUpgradeCommand(_ sender: NSButton) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(UpdateChecker.upgradeCommand, forType: .string)
+
+        sender.title = "Copied ✓"
+        // Main queue still drains while the alert's modal loop runs
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            sender.title = "Copy"
+        }
     }
 
     /// Initialize server tracking from config
