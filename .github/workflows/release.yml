@@ -94,6 +94,13 @@ jobs:
               
               cp "#{build_dir}/#{app_name}", "#{build_dir}/#{app_bundle}/Contents/MacOS/"
               cp "Resources/Info.plist", "#{build_dir}/#{app_bundle}/Contents/"
+
+              # Source tarball carries the committed Info.plist; stamp the formula version into it
+              plist = "#{build_dir}/#{app_bundle}/Contents/Info.plist"
+              short_version = version.to_s.delete_prefix("v")
+              system "/usr/libexec/PlistBuddy", "-c", "Set :CFBundleShortVersionString #{short_version}", plist
+              system "/usr/libexec/PlistBuddy", "-c", "Set :CFBundleVersion #{short_version.delete(".")}", plist
+
               cp "Resources/ntfy-macos.icns", "#{build_dir}/#{app_bundle}/Contents/Resources/"
               
               system "codesign", "--force", "--deep", "--sign", "-", "#{build_dir}/#{app_bundle}"
