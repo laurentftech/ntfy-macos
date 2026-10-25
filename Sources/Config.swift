@@ -157,15 +157,23 @@ struct ServerConfig: Codable {
 struct AppConfig: Codable {
     let servers: [ServerConfig]
     let localServerPort: UInt16?
+    let checkForUpdates: Bool?
 
-    init(servers: [ServerConfig], localServerPort: UInt16? = nil) {
+    init(servers: [ServerConfig], localServerPort: UInt16? = nil, checkForUpdates: Bool? = nil) {
         self.servers = servers
         self.localServerPort = localServerPort
+        self.checkForUpdates = checkForUpdates
     }
 
     enum CodingKeys: String, CodingKey {
         case servers
         case localServerPort = "local_server_port"
+        case checkForUpdates = "check_for_updates"
+    }
+
+    /// Whether to check GitHub for new releases (default: true)
+    var shouldCheckForUpdates: Bool {
+        checkForUpdates ?? true
     }
 
     // Convenience: all topics across all servers
@@ -325,7 +333,7 @@ final class ConfigManager: @unchecked Sendable {
     }
 
     /// Known keys at each level of the config
-    private static let knownRootKeys: Set<String> = ["servers", "local_server_port"]
+    private static let knownRootKeys: Set<String> = ["servers", "local_server_port", "check_for_updates"]
     private static let knownServerKeys: Set<String> = ["url", "token", "topics", "allowed_schemes", "allowed_domains", "fetch_missed"]
     private static let knownTopicKeys: Set<String> = ["name", "icon_path", "icon_symbol", "auto_run_script", "silent", "click_url", "actions", "fetch_missed"]
     private static let knownActionKeys: Set<String> = ["title", "type", "path", "url", "name", "script"]
@@ -425,6 +433,7 @@ final class ConfigManager: @unchecked Sendable {
         let sampleYAML = """
         # ntfy-macos configuration file
         # local_server_port: 9292  # optional: enable local HTTP server for script-triggered notifications
+        # check_for_updates: false  # optional: disable the daily check for new releases on GitHub
         servers:
           - url: https://ntfy.sh
             # token: your_token_here  # optional, or use 'ntfy-macos auth add'

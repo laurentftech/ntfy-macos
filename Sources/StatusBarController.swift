@@ -7,6 +7,8 @@ class StatusBarController: NSObject {
     private var statusMenuItem: NSMenuItem?
     private var serversSubmenu: NSMenu?
     private var errorMenuItem: NSMenuItem?
+    private var updateMenuItem: NSMenuItem?
+    private var availableUpdate: (version: String, releaseURL: String)?
     private var aboutWindow: NSWindow?
     var onReloadConfig: (() -> Void)?
 
@@ -74,6 +76,13 @@ class StatusBarController: NSObject {
         errorMenuItem?.isEnabled = false
         errorMenuItem?.isHidden = true
         menu?.addItem(errorMenuItem!)
+
+        // Update available menu item (hidden until UpdateChecker finds a newer release)
+        updateMenuItem = NSMenuItem(title: "", action: #selector(showUpdateInstructions), keyEquivalent: "")
+        updateMenuItem?.target = self
+        updateMenuItem?.isEnabled = true
+        updateMenuItem?.isHidden = true
+        menu?.addItem(updateMenuItem!)
 
         // Servers submenu showing individual server statuses
         let serversItem = NSMenuItem(title: "Servers", action: nil, keyEquivalent: "")
@@ -294,6 +303,92 @@ class StatusBarController: NSObject {
         errorMenuItem?.isHidden = true
         errorMenuItem?.attributedTitle = nil
         errorMenuItem?.toolTip = nil
+    }
+
+    // MARK: - Updates
+
+    /// Shows an "Update Available" item in the menu (in blue)
+    func showUpdateAvailable(version: String, releaseURL: String) {
+        availableUpdate = (version, releaseURL)
+        updateMenuItem?.isHidden = false
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.systemBlue,
+            .font: NSFont.systemFont(ofSize: 13)
+        ]
+        updateMenuItem?.attributedTitle = NSAttributedString(string: "⬆️ Update Available: \(version)", attributes: attributes)
+        updateMenuItem?.toolTip = "You have \(AppConstants.effectiveVersion)"
+    }
+
+    @objc func showUpdateInstructions() {
+        guard let update = availableUpdate else { return }
+
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "ntfy-macos \(update.version) is available"
+        alert.informativeText = "You have \(AppConstants.effectiveVersion). To update with Homebrew, run:"
+        alert.alertStyle = .informational
+        alert.accessoryView = makeUpgradeCommandView()
+        alert.addButton(withTitle: "Close")
+        alert.runModal()
+        // Re-apply accessory policy to prevent Dock icon from lingering
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    /// Selectable command plus Copy / Release Notes buttons that keep the alert open
+    private func makeUpgradeCommandView() -> NSView {
+        let width: CGFloat = 260
+
+        // One command per line for readability; Copy still puts the single-line form on the pasteboard
+        let displayedCommand = UpdateChecker.upgradeCommand.replacingOccurrences(of: " && ", with: " &&\n")
+        let commandField = NSTextField(wrappingLabelWithString: displayedCommand)
+        commandField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        commandField.alignment = .center
+        commandField.isSelectable = true
+        commandField.preferredMaxLayoutWidth = width
+
+        let copyButton = NSButton(title: "Copy", target: self, action: #selector(copyUpgradeCommand(_:)))
+        copyButton.bezelStyle = .rounded
+
+        let releaseNotesButton = NSButton(title: "Release Notes", target: self, action: #selector(openReleaseNotes))
+        releaseNotesButton.bezelStyle = .rounded
+
+        let buttons = NSStackView(views: [copyButton, releaseNotesButton])
+        buttons.orientation = .horizontal
+        buttons.spacing = 8
+
+        let stack = NSStackView(views: [commandField, buttons])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+
+        // NSAlert shrinks a bare stack view to its fitting width and pins it left;
+        // a fixed-width container keeps it centered under the alert text
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: stack.fittingSize.height))
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            stack.topAnchor.constraint(equalTo: container.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        return container
+    }
+
+    @objc private func openReleaseNotes() {
+        guard let urlString = availableUpdate?.releaseURL, let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func copyUpgradeCommand(_ sender: NSButton) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(UpdateChecker.upgradeCommand, forType: .string)
+
+        sender.title = "Copied ✓"
+        // Main queue still drains while the alert's modal loop runs
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            sender.title = "Copy"
+        }
     }
 
     /// Initialize server tracking from config
