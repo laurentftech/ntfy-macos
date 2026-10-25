@@ -7,6 +7,8 @@ class StatusBarController: NSObject {
     private var statusMenuItem: NSMenuItem?
     private var serversSubmenu: NSMenu?
     private var errorMenuItem: NSMenuItem?
+    private var updateMenuItem: NSMenuItem?
+    private var availableUpdate: (version: String, releaseURL: String)?
     private var aboutWindow: NSWindow?
     var onReloadConfig: (() -> Void)?
 
@@ -74,6 +76,13 @@ class StatusBarController: NSObject {
         errorMenuItem?.isEnabled = false
         errorMenuItem?.isHidden = true
         menu?.addItem(errorMenuItem!)
+
+        // Update available menu item (hidden until UpdateChecker finds a newer release)
+        updateMenuItem = NSMenuItem(title: "", action: #selector(showUpdateInstructions), keyEquivalent: "")
+        updateMenuItem?.target = self
+        updateMenuItem?.isEnabled = true
+        updateMenuItem?.isHidden = true
+        menu?.addItem(updateMenuItem!)
 
         // Servers submenu showing individual server statuses
         let serversItem = NSMenuItem(title: "Servers", action: nil, keyEquivalent: "")
@@ -294,6 +303,48 @@ class StatusBarController: NSObject {
         errorMenuItem?.isHidden = true
         errorMenuItem?.attributedTitle = nil
         errorMenuItem?.toolTip = nil
+    }
+
+    // MARK: - Updates
+
+    /// Shows an "Update Available" item in the menu (in blue)
+    func showUpdateAvailable(version: String, releaseURL: String) {
+        availableUpdate = (version, releaseURL)
+        updateMenuItem?.isHidden = false
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.systemBlue,
+            .font: NSFont.systemFont(ofSize: 13)
+        ]
+        updateMenuItem?.attributedTitle = NSAttributedString(string: "⬆️ Update Available: \(version)", attributes: attributes)
+        updateMenuItem?.toolTip = "You have \(AppConstants.effectiveVersion)"
+    }
+
+    @objc func showUpdateInstructions() {
+        guard let update = availableUpdate else { return }
+
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "ntfy-macos \(update.version) is available"
+        alert.informativeText = "You have \(AppConstants.effectiveVersion). To update with Homebrew, run:\n\n\(UpdateChecker.upgradeCommand)"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Copy Command")
+        alert.addButton(withTitle: "Release Notes")
+        alert.addButton(withTitle: "Later")
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(UpdateChecker.upgradeCommand, forType: .string)
+        case .alertSecondButtonReturn:
+            if let url = URL(string: update.releaseURL) {
+                NSWorkspace.shared.open(url)
+            }
+        default:
+            break
+        }
+        // Re-apply accessory policy to prevent Dock icon from lingering
+        NSApp.setActivationPolicy(.accessory)
     }
 
     /// Initialize server tracking from config

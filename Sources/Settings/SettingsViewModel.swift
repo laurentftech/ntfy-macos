@@ -185,7 +185,12 @@ class SettingsViewModel: ObservableObject {
             )
         }
 
-        let appConfig = AppConfig(servers: serverConfigs, localServerPort: port)
+        // check_for_updates isn't editable in Settings; carry it over so saving doesn't drop it
+        let appConfig = AppConfig(
+            servers: serverConfigs,
+            localServerPort: port,
+            checkForUpdates: ConfigManager.shared.config?.checkForUpdates
+        )
 
         // Handle Keychain operations
         for server in servers {

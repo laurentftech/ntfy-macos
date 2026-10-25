@@ -416,6 +416,22 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         }
     }
 
+    func showUpdateNotification(version: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "ntfy-macos \(version) is available"
+        content.body = "You have \(AppConstants.effectiveVersion). Click to see how to update."
+        content.sound = .default
+        content.userInfo = ["updateAvailable": true]
+
+        let request = UNNotificationRequest(identifier: "update-\(version)", content: content, trigger: nil)
+
+        center.add(request) { error in
+            if let error = error {
+                Log.error("Failed to show update notification: \(error)")
+            }
+        }
+    }
+
     func showTestNotification(topic: String) {
         let content = UNMutableNotificationContent()
         content.title = "Test Notification"
@@ -454,7 +470,13 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         let messageBody = userInfo["messageBody"] as? String ?? ""
         let topic = userInfo["topic"] as? String ?? ""
 
-        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+        if userInfo["updateAvailable"] as? Bool == true {
+            if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+                Task { @MainActor in
+                    StatusBarController.shared.showUpdateInstructions()
+                }
+            }
+        } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
             // User clicked on the notification itself - open web view
             openNotificationInWeb(userInfo: userInfo)
         } else if response.actionIdentifier != UNNotificationDismissActionIdentifier {

@@ -151,6 +151,8 @@ final class NtfyMacOS: NtfyClientDelegate, @unchecked Sendable {
         }
         Task { @MainActor in
             StatusBarController.shared.initializeServers(servers: serverInfos)
+            // Started here so the update notification can only fire once permission is granted
+            UpdateChecker.shared.start()
         }
 
         // Create clients for each server, grouping topics by fetch_missed setting

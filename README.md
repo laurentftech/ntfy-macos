@@ -69,6 +69,8 @@ brew update && brew upgrade ntfy-macos
 brew services restart ntfy-macos
 ```
 
+ntfy-macos checks GitHub once a day for a new release. When one is available, it shows a notification (once per version) and an **Update Available** item in the menu bar, which gives you the command above to copy. To turn this off, add `check_for_updates: false` to the root of your `config.yml`.
+
 **Note**: Homebrew installation requires Xcode (not just Command Line Tools) because the app is built from source.
 
 ## Quick Start
@@ -165,6 +167,7 @@ servers:
 #### Global Fields
 
 - `local_server_port` (optional): Port for the local notification HTTP server (e.g., `9292`). Disabled if omitted.
+- `check_for_updates` (optional): Set to `false` to disable the daily check for new releases on GitHub. Enabled if omitted.
 
 #### Server Fields
 
