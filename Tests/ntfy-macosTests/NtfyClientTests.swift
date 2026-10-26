@@ -175,6 +175,29 @@ final class NtfyClientTests: XCTestCase {
         XCTAssertNotNil(client)
     }
 
+    func testConnectURLUsesJsonStreamPath() {
+        let client = NtfyClient(serverURL: "https://ntfy.sh", topics: ["a", "b"])
+        XCTAssertEqual(client.buildConnectURL()?.absoluteString, "https://ntfy.sh/a,b/json")
+    }
+
+    func testConnectURLWithFetchMissedRequestsAllOnFirstConnect() {
+        // A fresh server URL, so no cursor persisted by another test applies
+        let serverURL = "https://first-connect-\(UUID().uuidString).example.com"
+        let client = NtfyClient(serverURL: serverURL, topics: ["test"], fetchMissed: true)
+        XCTAssertEqual(client.buildConnectURL()?.query, "since=all")
+    }
+
+    /// A server behind a reverse proxy keeps its path prefix
+    func testConnectURLPreservesServerPathPrefix() {
+        let client = NtfyClient(serverURL: "https://example.com/ntfy", topics: ["test"])
+        XCTAssertEqual(client.buildConnectURL()?.path, "/ntfy/test/json")
+    }
+
+    func testConnectURLIgnoresTrailingSlash() {
+        let client = NtfyClient(serverURL: "https://example.com/ntfy/", topics: ["test"])
+        XCTAssertEqual(client.buildConnectURL()?.path, "/ntfy/test/json")
+    }
+
     // MARK: - Exponential Backoff Calculation
 
     func testExponentialBackoffCalculation() {
