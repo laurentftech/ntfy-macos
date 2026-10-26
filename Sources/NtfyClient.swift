@@ -202,14 +202,16 @@ final class NtfyClient: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Starts a new subscription, replacing any existing one. Must run on `queue`.
-    private func startConnection() {
-        guard shouldReconnect else { return }
-
+    /// Builds the subscription URL for the configured server and topics. Must run on `queue`.
+    /// Internal for testing.
+    func buildConnectURL() -> URL? {
         let topicsString = topics.joined(separator: ",")
-        guard var components = URLComponents(string: serverURL) else { return }
+        guard var components = URLComponents(string: serverURL) else { return nil }
 
-        components.path = "/\(topicsString)/json"
+        // Append rather than replace: a server behind a reverse proxy
+        // (e.g. https://host/ntfy) has its own path prefix that must be kept
+        let basePath = components.path.hasSuffix("/") ? String(components.path.dropLast()) : components.path
+        components.path = "\(basePath)/\(topicsString)/json"
 
         // Add since parameter to fetch missed messages when enabled
         if fetchMissed {
@@ -225,7 +227,14 @@ final class NtfyClient: NSObject, @unchecked Sendable {
             }
         }
 
-        guard let url = components.url else { return }
+        return components.url
+    }
+
+    /// Starts a new subscription, replacing any existing one. Must run on `queue`.
+    private func startConnection() {
+        guard shouldReconnect else { return }
+
+        guard let url = buildConnectURL() else { return }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"

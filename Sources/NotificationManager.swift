@@ -286,8 +286,8 @@ final class NotificationManager: NSObject, @unchecked Sendable {
             .withSymbolConfiguration(config)
     }
 
-    /// Converts an NSImage to a notification attachment
-    private func createAttachment(from image: NSImage) -> UNNotificationAttachment? {
+    /// Converts an NSImage to a notification attachment. Internal for testing.
+    func createAttachment(from image: NSImage) -> UNNotificationAttachment? {
         guard let tiffData = image.tiffRepresentation,
               let bitmapImage = NSBitmapImageRep(data: tiffData),
               let pngData = bitmapImage.representation(using: .png, properties: [:]) else {
@@ -300,9 +300,10 @@ final class NotificationManager: NSObject, @unchecked Sendable {
 
         do {
             try pngData.write(to: fileURL)
-            let attachment = try UNNotificationAttachment(identifier: UUID().uuidString, url: fileURL, options: nil)
-            try? FileManager.default.removeItem(at: fileURL)
-            return attachment
+            // The notification center moves this file into its own store when the
+            // notification is added, not here: deleting it now breaks delivery
+            // ("Failed to move attachment file into data store")
+            return try UNNotificationAttachment(identifier: UUID().uuidString, url: fileURL, options: nil)
         } catch {
             Log.error("Failed to write SF Symbol attachment: \(error)")
             try? FileManager.default.removeItem(at: fileURL)
