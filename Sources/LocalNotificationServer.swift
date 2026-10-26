@@ -117,13 +117,34 @@ final class LocalNotificationServer: @unchecked Sendable {
 
     /// Parse Content-Length header value from raw headers string
     private func parseContentLength(from headers: String) -> Int {
-        for line in headers.components(separatedBy: "\r\n") {
+        Int(headerValue(named: "content-length", in: headers) ?? "") ?? 0
+    }
+
+    /// Returns the value of the first header with the given lowercase name, if present
+    private func headerValue(named name: String, in headers: String) -> String? {
+        for line in headers.components(separatedBy: "\r\n").dropFirst() {
             let parts = line.split(separator: ":", maxSplits: 1)
-            if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
-                return Int(parts[1].trimmingCharacters(in: .whitespaces)) ?? 0
+            if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces).lowercased() == name {
+                return parts[1].trimmingCharacters(in: .whitespaces)
             }
         }
-        return 0
+        return nil
+    }
+
+    /// Whether a request may come from a web page rather than a local script.
+    /// Browsers send `Origin` on every POST, same-origin included, so any page could
+    /// otherwise post notifications to this port. A `Host` other than loopback means
+    /// a DNS-rebound page reached the server under its own domain name.
+    /// Internal for testing.
+    func isBrowserRequest(headers: String) -> Bool {
+        if headerValue(named: "origin", in: headers) != nil {
+            return true
+        }
+        guard let host = headerValue(named: "host", in: headers) else {
+            return false
+        }
+        let hostname = host.split(separator: ":", maxSplits: 1).first.map(String.init)?.lowercased() ?? ""
+        return hostname != "127.0.0.1" && hostname != "localhost"
     }
 
     private func processRequest(data: Data, connection: NWConnection) {
@@ -147,6 +168,13 @@ final class LocalNotificationServer: @unchecked Sendable {
 
         let method = String(parts[0])
         let path = String(parts[1])
+
+        let headers = raw.range(of: "\r\n\r\n").map { String(raw[..<$0.lowerBound]) } ?? raw
+        guard !isBrowserRequest(headers: headers) else {
+            Log.error("Local server rejected a request from a web page")
+            sendResponse(connection: connection, status: 403, body: "{\"error\":\"Browser requests are not allowed\"}")
+            return
+        }
 
         // Only accept POST /notify
         guard method == "POST" && path == "/notify" else {
@@ -217,6 +245,7 @@ final class LocalNotificationServer: @unchecked Sendable {
         switch status {
         case 200: statusText = "OK"
         case 400: statusText = "Bad Request"
+        case 403: statusText = "Forbidden"
         case 404: statusText = "Not Found"
         case 413: statusText = "Payload Too Large"
         default: statusText = "Error"

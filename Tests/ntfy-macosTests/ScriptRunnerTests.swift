@@ -218,4 +218,31 @@ final class ScriptRunnerTests: XCTestCase {
         // PATH should still contain the enhanced paths
         XCTAssertTrue(result.output.contains("/opt/homebrew/bin"))
     }
+
+    // MARK: - Shortcut Input
+
+    /// `shortcuts run -i` takes file paths: the message must reach the Shortcut as text,
+    /// never as the name of a file to read
+    func testShortcutInputIsWrittenToPrivateFile() throws {
+        let message = "/etc/hosts"
+        let fileURL = try runner.writeShortcutInput(message)
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+
+        XCTAssertNotEqual(fileURL.path, message)
+        XCTAssertEqual(try String(contentsOf: fileURL, encoding: .utf8), message)
+        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        let directoryAttributes = try FileManager.default.attributesOfItem(atPath: fileURL.deletingLastPathComponent().path)
+        XCTAssertEqual((directoryAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+    }
+
+    func testShortcutInputFilesAreDistinct() throws {
+        let first = try runner.writeShortcutInput("a")
+        let second = try runner.writeShortcutInput("b")
+        defer {
+            try? FileManager.default.removeItem(at: first.deletingLastPathComponent())
+            try? FileManager.default.removeItem(at: second.deletingLastPathComponent())
+        }
+        XCTAssertNotEqual(first.deletingLastPathComponent(), second.deletingLastPathComponent())
+    }
 }
