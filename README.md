@@ -191,7 +191,7 @@ servers:
 - `type` (required): `script`, `view`, `shortcut`, or `applescript`
 - `path` (for `script` and `applescript` file): Absolute path to the script file
 - `url` (for `view`): URL to open
-- `name` (for `shortcut`): macOS Shortcut name
+- `name` (for `shortcut`): macOS Shortcut name. The message body is passed to the Shortcut as text input
 - `script` (for `applescript` inline): AppleScript source code
 
 **Note**: Config-defined actions ALWAYS override any actions sent with the ntfy message.
@@ -385,6 +385,8 @@ curl -X POST http://127.0.0.1:9292/notify \
 | `tags`     | string[] | No       | Emoji tags (e.g., `["warning", "fire"]`) |
 
 **GET /health** - Returns `{"status": "ok"}` for health checks.
+
+The server only listens on `127.0.0.1` and is meant for local scripts: requests sent by a web browser (carrying an `Origin` header, or a `Host` other than `127.0.0.1`/`localhost`) are rejected with `403`, so web pages cannot post notifications.
 
 ### Example: Auto-run Script with Local Notifications
 

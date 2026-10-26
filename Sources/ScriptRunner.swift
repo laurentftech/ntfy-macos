@@ -129,14 +129,44 @@ final class ScriptRunner: ScriptRunnerProtocol, @unchecked Sendable {
         return true
     }
 
+    /// Writes Shortcut input text to a private temporary file. `shortcuts run -i` takes
+    /// file paths, not text: passing the message itself would read whatever file it names.
+    /// The caller removes the file's parent directory. Internal for testing.
+    func writeShortcutInput(_ input: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ntfy-macos-shortcut-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        let fileURL = directory.appendingPathComponent("input.txt")
+        guard FileManager.default.createFile(atPath: fileURL.path, contents: Data(input.utf8),
+                                             attributes: [.posixPermissions: 0o600]) else {
+            try? FileManager.default.removeItem(at: directory)
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return fileURL
+    }
+
     /// Runs a macOS Shortcut asynchronously with an optional input string
     func runShortcut(named shortcutName: String, withInput input: String? = nil) {
         DispatchQueue.global(qos: .utility).async {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
             var args = ["run", shortcutName]
+            var inputDirectory: URL?
             if let input = input {
-                args.append(contentsOf: ["-i", input])
+                do {
+                    let inputFile = try self.writeShortcutInput(input)
+                    inputDirectory = inputFile.deletingLastPathComponent()
+                    args.append(contentsOf: ["-i", inputFile.path])
+                } catch {
+                    Log.error("Failed to write input for shortcut '\(shortcutName)': \(error)")
+                    return
+                }
+            }
+            defer {
+                if let inputDirectory = inputDirectory {
+                    try? FileManager.default.removeItem(at: inputDirectory)
+                }
             }
             process.arguments = args
 
