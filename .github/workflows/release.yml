@@ -102,6 +102,7 @@ jobs:
               system "/usr/libexec/PlistBuddy", "-c", "Set :CFBundleVersion #{short_version.delete(".")}", plist
 
               cp "Resources/ntfy-macos.icns", "#{build_dir}/#{app_bundle}/Contents/Resources/"
+              system "./scripts/copy-notification-sounds.sh", "#{build_dir}/#{app_bundle}/Contents/Resources"
               
               system "codesign", "--force", "--deep", "--sign", "-", "#{build_dir}/#{app_bundle}"
               

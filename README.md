@@ -168,6 +168,7 @@ servers:
 
 - `local_server_port` (optional): Port for the local notification HTTP server (e.g., `9292`). Disabled if omitted.
 - `check_for_updates` (optional): Set to `false` to disable the daily check for new releases on GitHub. Enabled if omitted.
+- `notification_sound` (optional): Global sound for routine notifications: `glass` (default), a built-in macOS sound (`basso`, `blow`, `bottle`, `frog`, `funk`, `hero`, `morse`, `ping`, `pop`, `purr`, `sosumi`, `submarine`, or `tink`), `default` (macOS default), or `none`. Priority 5 notifications keep their critical sound.
 
 #### Server Fields
 

@@ -83,46 +83,9 @@ struct ServerDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .safeAreaInset(edge: .bottom) {
-            bottomBar
-        }
         .sheet(isPresented: $showTokenSheet) {
             TokenSheetView(server: $server)
         }
-    }
-
-    private var bottomBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack {
-                if let error = viewModel.saveError {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-
-                if !viewModel.isLocked {
-                    Button("Cancel") {
-                        viewModel.cancel()
-                    }
-                    .keyboardShortcut(.escape, modifiers: [])
-
-                    Button("Save") {
-                        viewModel.save()
-                    }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(!viewModel.hasUnsavedChanges)
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-            .padding(12)
-        }
-        .background(.bar)
     }
 }
 
