@@ -113,8 +113,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         // Use plain text versions to strip markdown syntax (macOS notifications don't render markdown)
         content.title = emojiPrefix + (message.plainTextTitle ?? message.title ?? "\(message.topic)")
         content.body = message.plainTextMessage ?? message.message ?? "\(message.topic)"
-        // Use Glass sound to distinguish from other notification services
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
+        applyRoutineSound(to: content)
 
         // Map ntfy priority to interruption levels
         if let priority = message.priority {
@@ -242,8 +241,11 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         // Use plain text versions to strip markdown syntax (macOS notifications don't render markdown)
         content.title = emojiPrefix + (message.plainTextTitle ?? message.title ?? "ntfy-macos")
         content.body = message.plainTextMessage ?? message.message ?? ""
-        // Use Glass sound to distinguish from other notification services
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
+        applyRoutineSound(to: content)
+        if message.priority == 5 {
+            content.interruptionLevel = .critical
+            content.sound = .defaultCritical
+        }
 
         let identifier = UUID().uuidString
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
@@ -251,6 +253,24 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         center.add(request) { error in
             if let error = error {
                 print("Failed to show notification: \(error)")
+            }
+        }
+    }
+
+    private func applyRoutineSound(to content: UNMutableNotificationContent) {
+        let setting = ConfigManager.shared.config?.effectiveNotificationSound ?? .glass
+        switch setting {
+        case .systemDefault:
+            content.sound = .default
+        case .none:
+            content.sound = nil
+        default:
+            if let soundName = setting.systemSoundName,
+               Bundle.main.url(forResource: soundName, withExtension: "aiff") != nil {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName("\(soundName).aiff"))
+            } else {
+                // Builds run directly by SwiftPM don't contain an app bundle resource directory.
+                content.sound = .default
             }
         }
     }

@@ -158,22 +158,30 @@ struct AppConfig: Codable {
     let servers: [ServerConfig]
     let localServerPort: UInt16?
     let checkForUpdates: Bool?
+    let notificationSound: NotificationSoundSetting?
 
-    init(servers: [ServerConfig], localServerPort: UInt16? = nil, checkForUpdates: Bool? = nil) {
+    init(servers: [ServerConfig], localServerPort: UInt16? = nil, checkForUpdates: Bool? = nil, notificationSound: NotificationSoundSetting? = nil) {
         self.servers = servers
         self.localServerPort = localServerPort
         self.checkForUpdates = checkForUpdates
+        self.notificationSound = notificationSound
     }
 
     enum CodingKeys: String, CodingKey {
         case servers
         case localServerPort = "local_server_port"
         case checkForUpdates = "check_for_updates"
+        case notificationSound = "notification_sound"
     }
 
     /// Whether to check GitHub for new releases (default: true)
     var shouldCheckForUpdates: Bool {
         checkForUpdates ?? true
+    }
+
+    /// Sound used for routine notifications. Missing values preserve the original Glass sound.
+    var effectiveNotificationSound: NotificationSoundSetting {
+        notificationSound ?? .glass
     }
 
     // Convenience: all topics across all servers
@@ -185,6 +193,68 @@ struct AppConfig: Codable {
     func serverConfig(forTopic topicName: String) -> ServerConfig? {
         return servers.first { server in
             server.topics.contains { $0.name == topicName }
+        }
+    }
+}
+
+enum NotificationSoundSetting: String, Codable, CaseIterable, Identifiable {
+    case glass
+    case basso
+    case blow
+    case bottle
+    case frog
+    case funk
+    case hero
+    case morse
+    case ping
+    case pop
+    case purr
+    case sosumi
+    case submarine
+    case tink
+    case systemDefault = "default"
+    case none
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .glass: "Glass"
+        case .basso: "Basso"
+        case .blow: "Blow"
+        case .bottle: "Bottle"
+        case .frog: "Frog"
+        case .funk: "Funk"
+        case .hero: "Hero"
+        case .morse: "Morse"
+        case .ping: "Ping"
+        case .pop: "Pop"
+        case .purr: "Purr"
+        case .sosumi: "Sosumi"
+        case .submarine: "Submarine"
+        case .tink: "Tink"
+        case .systemDefault: "System Default"
+        case .none: "None"
+        }
+    }
+
+    var systemSoundName: String? {
+        switch self {
+        case .glass: "Glass"
+        case .basso: "Basso"
+        case .blow: "Blow"
+        case .bottle: "Bottle"
+        case .frog: "Frog"
+        case .funk: "Funk"
+        case .hero: "Hero"
+        case .morse: "Morse"
+        case .ping: "Ping"
+        case .pop: "Pop"
+        case .purr: "Purr"
+        case .sosumi: "Sosumi"
+        case .submarine: "Submarine"
+        case .tink: "Tink"
+        case .systemDefault, .none: nil
         }
     }
 }
@@ -333,7 +403,7 @@ final class ConfigManager: @unchecked Sendable {
     }
 
     /// Known keys at each level of the config
-    private static let knownRootKeys: Set<String> = ["servers", "local_server_port", "check_for_updates"]
+    private static let knownRootKeys: Set<String> = ["servers", "local_server_port", "check_for_updates", "notification_sound"]
     private static let knownServerKeys: Set<String> = ["url", "token", "topics", "allowed_schemes", "allowed_domains", "fetch_missed"]
     private static let knownTopicKeys: Set<String> = ["name", "icon_path", "icon_symbol", "auto_run_script", "silent", "click_url", "actions", "fetch_missed"]
     private static let knownActionKeys: Set<String> = ["title", "type", "path", "url", "name", "script"]
@@ -434,6 +504,7 @@ final class ConfigManager: @unchecked Sendable {
         # ntfy-macos configuration file
         # local_server_port: 9292  # optional: enable local HTTP server for script-triggered notifications
         # check_for_updates: false  # optional: disable the daily check for new releases on GitHub
+        # notification_sound: glass  # optional: glass, basso, blow, bottle, frog, funk, hero, morse, ping, pop, purr, sosumi, submarine, tink, default, or none
         servers:
           - url: https://ntfy.sh
             # token: your_token_here  # optional, or use 'ntfy-macos auth add'

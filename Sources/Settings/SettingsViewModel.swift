@@ -49,11 +49,27 @@ struct EditableTopic: Identifiable {
     }
 }
 
+enum SettingsNavigationItem: Hashable {
+    case notifications
+    case localServer
+    case server(UUID)
+}
+
 @MainActor
 class SettingsViewModel: ObservableObject {
     @Published var servers: [EditableServer] = []
     @Published var localServerPort: String = ""
-    @Published var selectedServerID: UUID?
+    @Published var selectedNavigationItem: SettingsNavigationItem?
+    var selectedServerID: UUID? {
+        get {
+            guard case .server(let id) = selectedNavigationItem else { return nil }
+            return id
+        }
+        set {
+            selectedNavigationItem = newValue.map(SettingsNavigationItem.server)
+        }
+    }
+    @Published var notificationSound: NotificationSoundSetting = .glass
     @Published var hasUnsavedChanges: Bool = false
     @Published var isLocked: Bool = true
     @Published var saveError: String?
@@ -80,6 +96,10 @@ class SettingsViewModel: ObservableObject {
             .dropFirst()
             .sink { [weak self] _ in self?.hasUnsavedChanges = true }
             .store(in: &cancellables)
+        $notificationSound
+            .dropFirst()
+            .sink { [weak self] _ in self?.hasUnsavedChanges = true }
+            .store(in: &cancellables)
     }
 
     func loadFromConfig() {
@@ -90,6 +110,7 @@ class SettingsViewModel: ObservableObject {
         } else {
             localServerPort = ""
         }
+        notificationSound = config?.effectiveNotificationSound ?? .glass
 
         servers = (config?.servers ?? []).map { server in
             // Check if token is stored in Keychain
@@ -119,7 +140,7 @@ class SettingsViewModel: ObservableObject {
         }
 
         // Auto-select first server
-        selectedServerID = servers.first?.id
+        selectedServerID = servers.first?.id ?? nil
 
         hasUnsavedChanges = false
         saveError = nil
@@ -189,7 +210,8 @@ class SettingsViewModel: ObservableObject {
         let appConfig = AppConfig(
             servers: serverConfigs,
             localServerPort: port,
-            checkForUpdates: ConfigManager.shared.config?.checkForUpdates
+            checkForUpdates: ConfigManager.shared.config?.checkForUpdates,
+            notificationSound: notificationSound
         )
 
         // Handle Keychain operations

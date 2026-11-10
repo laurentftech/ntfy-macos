@@ -4,6 +4,7 @@ import AppKit
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @State private var copiedCommand: String?
+    @State private var previewSound: NSSound?
     @State private var statusTimer: Timer?
 
     private var isLocalServerEnabled: Bool {
@@ -44,49 +45,57 @@ struct SettingsView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        List(selection: $viewModel.selectedServerID) {
-            Section {
-                localServerSection
-            } header: {
-                Text("Local Server")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Servers") {
-                ForEach(viewModel.servers) { server in
-                    HStack {
-                        Label(
-                            server.url.isEmpty ? "New Server" : server.url
-                                .replacingOccurrences(of: "https://", with: "")
-                                .replacingOccurrences(of: "http://", with: ""),
-                            systemImage: "server.rack"
-                        )
-                        .foregroundStyle(.secondary)
-
-                        Spacer()
-
-                        // Connection status indicator
-                        if !server.url.isEmpty, let state = viewModel.serverConnectionStates[server.url] {
-                            Circle()
-                                .fill(connectionColor(for: state))
-                                .frame(width: 8, height: 8)
-                                .help(connectionTooltip(for: state))
-                        }
-                    }
-                    .tag(server.id)
-                }
-                .onDelete { indexSet in
-                    guard !viewModel.isLocked else { return }
-                    for index in indexSet {
-                        viewModel.removeServer(viewModel.servers[index])
-                    }
-                }
-            }
+        List(selection: $viewModel.selectedNavigationItem) {
+            sectionNavigation
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 400)
         .safeAreaInset(edge: .bottom) {
             bottomBar
+        }
+    }
+
+    private var sectionNavigation: some View {
+        Group {
+            Section("Settings") {
+                Label("Notifications", systemImage: "bell.badge")
+                    .tag(SettingsNavigationItem.notifications)
+                Label("Local Server", systemImage: "network")
+                    .tag(SettingsNavigationItem.localServer)
+            }
+            serversSection
+        }
+    }
+
+    private var serversSection: some View {
+        Section("Servers") {
+            ForEach(viewModel.servers) { server in
+                HStack {
+                    Label(
+                        server.url.isEmpty ? "New Server" : server.url
+                            .replacingOccurrences(of: "https://", with: "")
+                            .replacingOccurrences(of: "http://", with: ""),
+                        systemImage: "server.rack"
+                    )
+                    .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    if !server.url.isEmpty, let state = viewModel.serverConnectionStates[server.url] {
+                        Circle()
+                            .fill(connectionColor(for: state))
+                            .frame(width: 8, height: 8)
+                            .help(connectionTooltip(for: state))
+                    }
+                }
+                .tag(SettingsNavigationItem.server(server.id))
+            }
+            .onDelete { indexSet in
+                guard !viewModel.isLocked else { return }
+                for index in indexSet {
+                    viewModel.removeServer(viewModel.servers[index])
+                }
+            }
         }
     }
 
@@ -287,25 +296,165 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var detail: some View {
-        if let index = viewModel.selectedServerIndex() {
-            ServerDetailView(
-                server: $viewModel.servers[index],
-                viewModel: viewModel
-            )
-            .id(viewModel.servers[index].id)
-        } else {
-            VStack(spacing: 16) {
-                Image(systemName: "server.rack")
-                    .font(.system(size: 48))
-                    .foregroundStyle(.secondary)
-                Text("Select a server or add one")
-                    .foregroundStyle(.secondary)
-                Button("Add Server") {
-                    viewModel.isLocked = false
-                    viewModel.addServer()
+        Group {
+            switch viewModel.selectedNavigationItem {
+            case .notifications:
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("Notifications")
+                        .font(.title2.weight(.semibold))
+                    compactNotificationSoundLayout
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            case .localServer:
+                localServerDetailView
+            case .server(let id):
+                if let index = viewModel.servers.firstIndex(where: { $0.id == id }) {
+                    ServerDetailView(
+                        server: $viewModel.servers[index],
+                        viewModel: viewModel
+                    )
+                    .id(viewModel.servers[index].id)
+                } else {
+                    emptySelection
+                }
+            case nil:
+                emptySelection
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            saveBar
+        }
+    }
+
+    private var compactNotificationSoundLayout: some View {
+        HStack(spacing: 24) {
+            soundDescription
+            Spacer(minLength: 20)
+            soundMenu
+        }
+    }
+
+    private var soundDescription: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Routine notification sound")
+            Text("Used across all topics. Priority 5 keeps its critical sound.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var soundMenu: some View {
+        Menu {
+            ForEach(NotificationSoundSetting.allCases) { sound in
+                Button {
+                    viewModel.notificationSound = sound
+                } label: {
+                    if viewModel.notificationSound == sound {
+                        Label(sound.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(sound.displayName)
+                    }
+                }
+                .onHover { isHovering in
+                    if isHovering {
+                        previewNotificationSound(sound)
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } label: {
+            HStack(spacing: 8) {
+                Text(viewModel.notificationSound.displayName)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
         }
+        .menuStyle(.borderlessButton)
+        .disabled(viewModel.isLocked)
+        .accessibilityLabel("Routine notification sound")
+    }
+
+    private func previewNotificationSound(_ sound: NotificationSoundSetting) {
+        previewSound?.stop()
+
+        if sound == .systemDefault {
+            previewSound = nil
+            NSSound.beep()
+            return
+        }
+
+        if sound == .none {
+            previewSound = nil
+            return
+        }
+
+        guard let name = sound.systemSoundName,
+              let soundToPlay = NSSound(named: NSSound.Name(name)) else { return }
+        previewSound = soundToPlay
+        soundToPlay.play()
+    }
+
+    private var localServerDetailView: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Local Server")
+                .font(.title2.weight(.semibold))
+            localServerSection
+                .frame(maxWidth: 520, alignment: .leading)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var emptySelection: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "server.rack")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("Select a server or add one")
+                .foregroundStyle(.secondary)
+            Button("Add Server") {
+                viewModel.isLocked = false
+                viewModel.addServer()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var saveBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack {
+                if let error = viewModel.saveError {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(error)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if !viewModel.isLocked {
+                    Button("Cancel") {
+                        viewModel.cancel()
+                    }
+                    .keyboardShortcut(.escape, modifiers: [])
+
+                    Button("Save") {
+                        viewModel.save()
+                    }
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .disabled(!viewModel.hasUnsavedChanges)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(12)
+        }
+        .background(.bar)
     }
 }

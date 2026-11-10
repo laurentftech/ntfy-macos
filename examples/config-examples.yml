@@ -7,6 +7,9 @@
 # Enable local notification server on localhost (optional)
 # Scripts can POST to http://127.0.0.1:9292/notify to trigger notifications
 # local_server_port: 9292
+# Global routine sound: glass (default), basso, blow, bottle, frog, funk, hero,
+# morse, ping, pop, purr, sosumi, submarine, tink, default, or none
+# notification_sound: glass
 
 servers:
   # ===========================================

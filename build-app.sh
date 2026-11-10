@@ -24,6 +24,9 @@ cp "Resources/Info.plist" "$BUILD_DIR/$APP_BUNDLE/Contents/"
 # Copy icon
 cp "Resources/ntfy-macos.icns" "$BUILD_DIR/$APP_BUNDLE/Contents/Resources/"
 
+# UserNotifications only loads custom sounds from the app bundle or its container.
+./scripts/copy-notification-sounds.sh "$BUILD_DIR/$APP_BUNDLE/Contents/Resources"
+
 # Ad-hoc sign the app bundle (required for notifications to work)
 echo "Signing app bundle..."
 codesign --force --deep --sign - "$BUILD_DIR/$APP_BUNDLE"
