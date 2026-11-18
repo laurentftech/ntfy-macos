@@ -113,20 +113,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         // Use plain text versions to strip markdown syntax (macOS notifications don't render markdown)
         content.title = emojiPrefix + (message.plainTextTitle ?? message.title ?? "\(message.topic)")
         content.body = message.plainTextMessage ?? message.message ?? "\(message.topic)"
-        applyRoutineSound(to: content)
-
-        // Map ntfy priority to interruption levels
-        if let priority = message.priority {
-            switch priority {
-            case 5:
-                content.interruptionLevel = .critical
-                content.sound = .defaultCritical
-            case 4:
-                content.interruptionLevel = .timeSensitive
-            default:
-                content.interruptionLevel = .active
-            }
-        }
+        applyStyle(for: message.priority, to: content)
 
         if let attachment = createIconAttachment(from: topicConfig) {
             content.attachments = [attachment]
@@ -241,11 +228,7 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         // Use plain text versions to strip markdown syntax (macOS notifications don't render markdown)
         content.title = emojiPrefix + (message.plainTextTitle ?? message.title ?? "ntfy-macos")
         content.body = message.plainTextMessage ?? message.message ?? ""
-        applyRoutineSound(to: content)
-        if message.priority == 5 {
-            content.interruptionLevel = .critical
-            content.sound = .defaultCritical
-        }
+        applyStyle(for: message.priority, to: content)
 
         let identifier = UUID().uuidString
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
@@ -257,21 +240,38 @@ final class NotificationManager: NSObject, @unchecked Sendable {
         }
     }
 
-    private func applyRoutineSound(to content: UNMutableNotificationContent) {
-        let setting = ConfigManager.shared.config?.effectiveNotificationSound ?? .glass
+    /// Sets interruption level and sound from the ntfy priority and the configured sounds
+    private func applyStyle(for priority: Int?, to content: UNMutableNotificationContent) {
+        let config = ConfigManager.shared.config
+        let style = NotificationStyle.resolve(
+            priority: priority,
+            routineSound: config?.effectiveNotificationSound ?? .glass,
+            highSound: config?.effectiveNotificationSoundHigh ?? .critical
+        )
+        content.interruptionLevel = style.interruptionLevel
+        switch style.sound {
+        case .silent:
+            content.sound = nil
+        case .setting(let setting):
+            content.sound = Self.notificationSound(for: setting)
+        }
+    }
+
+    private static func notificationSound(for setting: NotificationSoundSetting) -> UNNotificationSound? {
         switch setting {
         case .systemDefault:
-            content.sound = .default
+            return .default
+        case .critical:
+            return .defaultCritical
         case .none:
-            content.sound = nil
+            return nil
         default:
             if let soundName = setting.systemSoundName,
                Bundle.main.url(forResource: soundName, withExtension: "aiff") != nil {
-                content.sound = UNNotificationSound(named: UNNotificationSoundName("\(soundName).aiff"))
-            } else {
-                // Builds run directly by SwiftPM don't contain an app bundle resource directory.
-                content.sound = .default
+                return UNNotificationSound(named: UNNotificationSoundName("\(soundName).aiff"))
             }
+            // Builds run directly by SwiftPM don't contain an app bundle resource directory.
+            return .default
         }
     }
 
@@ -479,7 +479,7 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound, .badge])
+        completionHandler(NotificationStyle.presentationOptions(for: notification.request.content.interruptionLevel))
     }
 
     func userNotificationCenter(
@@ -582,5 +582,42 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
                 }
             }
         }
+    }
+}
+
+/// How a message interrupts the user, derived from its ntfy priority.
+/// ntfy priorities: 1 = min, 2 = low, 3 = default, 4 = high, 5 = max/urgent.
+struct NotificationStyle: Equatable {
+    enum Sound: Equatable {
+        case silent
+        case setting(NotificationSoundSetting)
+    }
+
+    let interruptionLevel: UNNotificationInterruptionLevel
+    let sound: Sound
+
+    /// - Parameters:
+    ///   - routineSound: `notification_sound`, used for priority 3 and unset priority
+    ///   - highSound: `notification_sound_high`, used for priority 4-5
+    static func resolve(
+        priority: Int?,
+        routineSound: NotificationSoundSetting,
+        highSound: NotificationSoundSetting
+    ) -> NotificationStyle {
+        switch priority {
+        case 1, 2:
+            return NotificationStyle(interruptionLevel: .passive, sound: .silent)
+        case 4:
+            return NotificationStyle(interruptionLevel: .timeSensitive, sound: .setting(highSound))
+        case 5:
+            return NotificationStyle(interruptionLevel: .critical, sound: .setting(highSound))
+        default:
+            return NotificationStyle(interruptionLevel: .active, sound: .setting(routineSound))
+        }
+    }
+
+    /// Presentation options while the app is frontmost: passive messages go to Notification Center only
+    static func presentationOptions(for level: UNNotificationInterruptionLevel) -> UNNotificationPresentationOptions {
+        level == .passive ? [.list] : [.banner, .sound, .badge]
     }
 }

@@ -370,4 +370,27 @@ final class ConfigTests: XCTestCase {
             XCTFail("Expected insecureFilePermissions error")
         }
     }
+
+    func testSoundSettingsDecoding() throws {
+        let yaml = """
+        notification_sound: none
+        notification_sound_high: sosumi
+        servers:
+          - url: https://ntfy.sh
+            topics:
+              - name: backups
+        """
+        let config = try YAMLDecoder().decode(AppConfig.self, from: yaml)
+
+        XCTAssertEqual(config.notificationSound, NotificationSoundSetting.none)
+        XCTAssertEqual(config.notificationSoundHigh, .sosumi)
+    }
+
+    func testSoundSettingsOmittedWhenNil() throws {
+        let config = AppConfig(servers: [ServerConfig(url: "https://ntfy.sh", topics: [TopicConfig(name: "t")])])
+        let yaml = try YAMLEncoder().encode(config)
+
+        XCTAssertFalse(yaml.contains("notification_sound_high"))
+        XCTAssertEqual(config.effectiveNotificationSoundHigh, .critical)
+    }
 }

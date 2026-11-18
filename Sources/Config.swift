@@ -159,12 +159,14 @@ struct AppConfig: Codable {
     let localServerPort: UInt16?
     let checkForUpdates: Bool?
     let notificationSound: NotificationSoundSetting?
+    let notificationSoundHigh: NotificationSoundSetting?
 
-    init(servers: [ServerConfig], localServerPort: UInt16? = nil, checkForUpdates: Bool? = nil, notificationSound: NotificationSoundSetting? = nil) {
+    init(servers: [ServerConfig], localServerPort: UInt16? = nil, checkForUpdates: Bool? = nil, notificationSound: NotificationSoundSetting? = nil, notificationSoundHigh: NotificationSoundSetting? = nil) {
         self.servers = servers
         self.localServerPort = localServerPort
         self.checkForUpdates = checkForUpdates
         self.notificationSound = notificationSound
+        self.notificationSoundHigh = notificationSoundHigh
     }
 
     enum CodingKeys: String, CodingKey {
@@ -172,6 +174,7 @@ struct AppConfig: Codable {
         case localServerPort = "local_server_port"
         case checkForUpdates = "check_for_updates"
         case notificationSound = "notification_sound"
+        case notificationSoundHigh = "notification_sound_high"
     }
 
     /// Whether to check GitHub for new releases (default: true)
@@ -182,6 +185,11 @@ struct AppConfig: Codable {
     /// Sound used for routine notifications. Missing values preserve the original Glass sound.
     var effectiveNotificationSound: NotificationSoundSetting {
         notificationSound ?? .glass
+    }
+
+    /// Sound used for priority 4-5 notifications. Defaults to the macOS critical alert sound.
+    var effectiveNotificationSoundHigh: NotificationSoundSetting {
+        notificationSoundHigh ?? .critical
     }
 
     // Convenience: all topics across all servers
@@ -213,6 +221,7 @@ enum NotificationSoundSetting: String, Codable, CaseIterable, Identifiable {
     case submarine
     case tink
     case systemDefault = "default"
+    case critical
     case none
 
     var id: String { rawValue }
@@ -234,6 +243,7 @@ enum NotificationSoundSetting: String, Codable, CaseIterable, Identifiable {
         case .submarine: "Submarine"
         case .tink: "Tink"
         case .systemDefault: "System Default"
+        case .critical: "Critical"
         case .none: "None"
         }
     }
@@ -254,7 +264,7 @@ enum NotificationSoundSetting: String, Codable, CaseIterable, Identifiable {
         case .sosumi: "Sosumi"
         case .submarine: "Submarine"
         case .tink: "Tink"
-        case .systemDefault, .none: nil
+        case .systemDefault, .critical, .none: nil
         }
     }
 }
@@ -403,7 +413,7 @@ final class ConfigManager: @unchecked Sendable {
     }
 
     /// Known keys at each level of the config
-    private static let knownRootKeys: Set<String> = ["servers", "local_server_port", "check_for_updates", "notification_sound"]
+    private static let knownRootKeys: Set<String> = ["servers", "local_server_port", "check_for_updates", "notification_sound", "notification_sound_high"]
     private static let knownServerKeys: Set<String> = ["url", "token", "topics", "allowed_schemes", "allowed_domains", "fetch_missed"]
     private static let knownTopicKeys: Set<String> = ["name", "icon_path", "icon_symbol", "auto_run_script", "silent", "click_url", "actions", "fetch_missed"]
     private static let knownActionKeys: Set<String> = ["title", "type", "path", "url", "name", "script"]
@@ -505,6 +515,7 @@ final class ConfigManager: @unchecked Sendable {
         # local_server_port: 9292  # optional: enable local HTTP server for script-triggered notifications
         # check_for_updates: false  # optional: disable the daily check for new releases on GitHub
         # notification_sound: glass  # optional: glass, basso, blow, bottle, frog, funk, hero, morse, ping, pop, purr, sosumi, submarine, tink, default, or none
+        # notification_sound_high: critical  # optional: sound for priority 4-5 messages: critical (default) or any notification_sound value; priority 1-2 are always silent
         servers:
           - url: https://ntfy.sh
             # token: your_token_here  # optional, or use 'ntfy-macos auth add'
