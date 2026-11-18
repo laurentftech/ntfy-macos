@@ -303,6 +303,7 @@ struct SettingsView: View {
                     Text("Notifications")
                         .font(.title2.weight(.semibold))
                     compactNotificationSoundLayout
+                    highPrioritySoundLayout
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -338,7 +339,7 @@ struct SettingsView: View {
     private var soundDescription: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Routine notification sound")
-            Text("Used across all topics. Priority 5 keeps its critical sound.")
+            Text("Used for default priority (3) messages. Priority 1–2 are silent.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -346,7 +347,7 @@ struct SettingsView: View {
 
     private var soundMenu: some View {
         Menu {
-            ForEach(NotificationSoundSetting.allCases) { sound in
+            ForEach(NotificationSoundSetting.allCases.filter { $0 != .critical }) { sound in
                 Button {
                     viewModel.notificationSound = sound
                 } label: {
@@ -378,10 +379,58 @@ struct SettingsView: View {
         .accessibilityLabel("Routine notification sound")
     }
 
+    private var highPrioritySoundLayout: some View {
+        HStack(spacing: 24) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("High priority sound")
+                Text("Used for priority 4–5 messages.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 20)
+            highSoundMenu
+        }
+    }
+
+    private var highSoundMenu: some View {
+        Menu {
+            ForEach(NotificationSoundSetting.allCases) { sound in
+                Button {
+                    viewModel.notificationSoundHigh = sound
+                } label: {
+                    if viewModel.notificationSoundHigh == sound {
+                        Label(sound.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(sound.displayName)
+                    }
+                }
+                .onHover { isHovering in
+                    if isHovering {
+                        previewNotificationSound(sound)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(viewModel.notificationSoundHigh.displayName)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
+        }
+        .menuStyle(.borderlessButton)
+        .disabled(viewModel.isLocked)
+        .accessibilityLabel("High priority notification sound")
+    }
+
     private func previewNotificationSound(_ sound: NotificationSoundSetting) {
         previewSound?.stop()
 
-        if sound == .systemDefault {
+        // No public API plays the critical alert sound outside a notification; approximate with the beep
+        if sound == .systemDefault || sound == .critical {
             previewSound = nil
             NSSound.beep()
             return

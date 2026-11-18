@@ -168,7 +168,8 @@ servers:
 
 - `local_server_port` (optional): Port for the local notification HTTP server (e.g., `9292`). Disabled if omitted.
 - `check_for_updates` (optional): Set to `false` to disable the daily check for new releases on GitHub. Enabled if omitted.
-- `notification_sound` (optional): Global sound for routine notifications: `glass` (default), a built-in macOS sound (`basso`, `blow`, `bottle`, `frog`, `funk`, `hero`, `morse`, `ping`, `pop`, `purr`, `sosumi`, `submarine`, or `tink`), `default` (macOS default), or `none`. Priority 5 notifications keep their critical sound.
+- `notification_sound` (optional): Global sound for routine notifications: `glass` (default), a built-in macOS sound (`basso`, `blow`, `bottle`, `frog`, `funk`, `hero`, `morse`, `ping`, `pop`, `purr`, `sosumi`, `submarine`, or `tink`), `default` (macOS default), or `none`. Used for priority 3 notifications.
+- `notification_sound_high` (optional): Sound for priority 4-5 notifications: `critical` (default, the macOS critical alert sound) or any `notification_sound` value.
 
 #### Server Fields
 
@@ -421,11 +422,16 @@ fi
 
 ## Priority Mapping
 
-ntfy priority levels map to macOS interruption levels:
+ntfy priority levels map to macOS interruption levels and sounds:
 
-- Priority 5 → Critical (bypasses Focus modes)
-- Priority 4 → Time Sensitive (prominently displayed)
-- Priority 1-3 → Active (normal notifications)
+| Priority | Interruption level | Sound |
+|----------|--------------------|-------|
+| 5 (max)  | Critical           | `notification_sound_high` (default: critical) |
+| 4 (high) | Time Sensitive     | `notification_sound_high` (default: critical) |
+| 3 (default) | Active          | `notification_sound` |
+| 1-2 (min/low) | Passive       | none — delivered quietly to Notification Center, no banner |
+
+Note: release builds are ad-hoc signed, so macOS does not grant the critical-alert or time-sensitive entitlements. Priority 4-5 are therefore displayed like normal notifications and do not bypass Focus modes; use `notification_sound_high` to make them stand out.
 
 ## SF Symbols
 

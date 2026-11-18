@@ -70,6 +70,7 @@ class SettingsViewModel: ObservableObject {
         }
     }
     @Published var notificationSound: NotificationSoundSetting = .glass
+    @Published var notificationSoundHigh: NotificationSoundSetting = .critical
     @Published var hasUnsavedChanges: Bool = false
     @Published var isLocked: Bool = true
     @Published var saveError: String?
@@ -100,6 +101,10 @@ class SettingsViewModel: ObservableObject {
             .dropFirst()
             .sink { [weak self] _ in self?.hasUnsavedChanges = true }
             .store(in: &cancellables)
+        $notificationSoundHigh
+            .dropFirst()
+            .sink { [weak self] _ in self?.hasUnsavedChanges = true }
+            .store(in: &cancellables)
     }
 
     func loadFromConfig() {
@@ -111,6 +116,7 @@ class SettingsViewModel: ObservableObject {
             localServerPort = ""
         }
         notificationSound = config?.effectiveNotificationSound ?? .glass
+        notificationSoundHigh = config?.effectiveNotificationSoundHigh ?? .critical
 
         servers = (config?.servers ?? []).map { server in
             // Check if token is stored in Keychain
@@ -211,7 +217,8 @@ class SettingsViewModel: ObservableObject {
             servers: serverConfigs,
             localServerPort: port,
             checkForUpdates: ConfigManager.shared.config?.checkForUpdates,
-            notificationSound: notificationSound
+            notificationSound: notificationSound,
+            notificationSoundHigh: notificationSoundHigh
         )
 
         // Handle Keychain operations
